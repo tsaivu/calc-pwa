@@ -18,8 +18,10 @@
   // Trả về số, hoặc null nếu biểu thức không hợp lệ / chia cho 0.
   function evaluate(src) {
     let s = normalize(src);
-    while (s && /[+\-*/.]$/.test(s)) s = s.slice(0, -1); // bỏ toán tử cuối còn dở
+    while (s && /[+\-*/.(]$/.test(s)) s = s.slice(0, -1); // bỏ toán tử / dấu chấm / '(' còn dở
     if (!s) return null;
+    const unclosed = (s.match(/\(/g) || []).length - (s.match(/\)/g) || []).length;
+    if (unclosed > 0) s += ')'.repeat(unclosed); // tự đóng ngoặc còn mở
 
     let i = 0;
     const peek = () => s[i];
@@ -56,10 +58,18 @@
     }
 
     function parseFactor() {
-      const m = /^(\d+\.?\d*|\.\d+)/.exec(s.slice(i));
-      if (!m) throw new Error('cú pháp');
-      i += m[0].length;
-      let v = parseFloat(m[0]);
+      let v;
+      if (peek() === '(') {
+        i++;
+        v = parseExpr();
+        if (peek() !== ')') throw new Error('thiếu )');
+        i++;
+      } else {
+        const m = /^(\d+\.?\d*|\.\d+)/.exec(s.slice(i));
+        if (!m) throw new Error('cú pháp');
+        i += m[0].length;
+        v = parseFloat(m[0]);
+      }
       while (peek() === '%') { i++; v = v / 100; }
       return v;
     }
@@ -73,8 +83,14 @@
     }
   }
 
-  const fmt = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 10 });
-  const formatValue = (v) => fmt.format(v);
+  // Mặc định: 15 chữ số có nghĩa, bỏ nhiễu số thực kiểu 4000000001.
+  // Nếu người dùng chọn số chữ số thập phân cố định thì dùng bộ định dạng dưới.
+  const fmt = new Intl.NumberFormat('vi-VN', { maximumSignificantDigits: 15 });
+  const fixedFmt = [0, 1, 2, 3, 4, 5, 6].map((d) => new Intl.NumberFormat('vi-VN', {
+    minimumFractionDigits: d,
+    maximumFractionDigits: d,
+  }));
+  const formatValue = (v) => (state.decimals === 'auto' ? fmt.format(v) : fixedFmt[Number(state.decimals)].format(v));
   // Số thô dạng dấu phẩy để đưa ngược vào biểu thức khi tiếp tục tính.
   const rawForInput = (v) => String(v).replace('.', ',');
 
@@ -133,8 +149,27 @@
    * ========================================================== */
 
   const OPERATORS = ['+', '−', '×', '÷'];
+  const DEC_KEY = 'calc-decimals';
+  const DEC_OPTIONS = ['auto', '0', '1', '2', '3', '4', '5', '6'];
+
+  // Nhớ lựa chọn số thập phân trên thiết bị này (nếu được phép lưu).
+  function loadDecimals() {
+    try {
+      const v = localStorage.getItem(DEC_KEY);
+      return DEC_OPTIONS.includes(v) ? v : 'auto';
+    } catch (_) {
+      return 'auto';
+    }
+  }
+  function saveDecimals(v) {
+    try { localStorage.setItem(DEC_KEY, v); } catch (_) { /* không lưu được thì thôi */ }
+  }
+
   const state = {
     expr: '',          // biểu thức đang gõ, dùng ký hiệu hiển thị (× ÷ −)
+    caret: 0,          // vị trí con trỏ trong expr (chỉ có tác dụng khi bật chế độ sửa)
+    editMode: false,   // chế độ sửa: mặc định tắt
+    decimals: loadDecimals(), // 'auto' hoặc '0'..'6'
     value: null,       // kết quả số sau khi bấm =
     justEvaluated: false,
     error: false,
@@ -160,122 +195,176 @@
     importBtn: document.getElementById('importBtn'),
     importFile: document.getElementById('importFile'),
     noMatch: document.getElementById('noMatch'),
+    editToggle: document.getElementById('editToggle'),
+    caretLeft: document.getElementById('caretLeft'),
+    caretRight: document.getElementById('caretRight'),
+    decimals: document.getElementById('decimals'),
   };
 
   const isOp = (ch) => OPERATORS.includes(ch);
-  const lastChar = () => state.expr.slice(-1);
+  const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
 
-  // Đoạn số đang gõ ở cuối biểu thức.
-  function currentSegment() {
-    const m = /[\d,]*$/.exec(state.expr);
-    return m ? m[0] : '';
+  // Vị trí con trỏ hiệu lực: luôn ở cuối nếu không bật chế độ sửa.
+  function caretPos() {
+    return state.editMode ? clamp(state.caret, 0, state.expr.length) : state.expr.length;
+  }
+
+  // Tách biểu thức quanh con trỏ: [phần trước, phần sau].
+  function parts() {
+    const c = caretPos();
+    return [state.expr.slice(0, c), state.expr.slice(c)];
+  }
+
+  // Ghi lại biểu thức và đặt con trỏ ngay sau phần vừa ghi.
+  function setExpr(before, after = '') {
+    state.expr = before + after;
+    state.caret = before.length;
+  }
+
+  // Bỏ kết quả đang hiển thị và xóa biểu thức để bắt đầu lại.
+  function clearResult() {
+    state.expr = '';
+    state.caret = 0;
+    state.value = null;
+    state.justEvaluated = false;
+    state.error = false;
+  }
+
+  // Thoát trạng thái "vừa bấm =" nhưng giữ nguyên biểu thức (dùng khi sửa).
+  function leaveResult() {
+    state.justEvaluated = false;
+    state.value = null;
+    state.error = false;
   }
 
   function inputDigit(d) {
-    if (state.justEvaluated) {
-      state.expr = '';
-      state.justEvaluated = false;
-      state.value = null;
-      state.error = false;
-    }
-    if (state.expr === '0') state.expr = d;
-    else state.expr += d;
+    if (state.justEvaluated) clearResult();
+    let [b, a] = parts();
+    if (b.endsWith(')')) b += '×';                             // (1+2)3 hiểu là (1+2)×3
+    else if (/(^|[+\-−×÷(])0$/.test(b)) b = b.slice(0, -1);   // số 0 đứng đầu bị thay bằng chữ số mới
+    setExpr(b + d, a);
     clearStale();
   }
 
   function inputComma() {
-    if (state.justEvaluated) { state.expr = ''; state.justEvaluated = false; state.value = null; state.error = false; }
-    if (currentSegment().includes(',')) return;
-    if (state.expr === '' || isOp(lastChar())) state.expr += '0';
-    state.expr += ',';
+    if (state.justEvaluated) clearResult();
+    let [b, a] = parts();
+    const seg = /[\d,]*$/.exec(b)[0];
+    if (seg.includes(',') || /^\d*,/.test(a)) return render(); // đã có dấu phẩy trong số này
+    if (b.endsWith(')')) return render();
+    if (b === '' || /[+\-−×÷(]$/.test(b)) b += '0';
+    setExpr(b + ',', a);
+    clearStale();
+  }
+
+  function inputParen(p) {
+    if (state.justEvaluated) clearResult();
+    let [b, a] = parts();
+    if (p === '(') {
+      if (/[\d)%]$/.test(b)) b += '×';                          // 2( hiểu là 2×(
+      setExpr(b + '(', a);
+    } else {
+      const opens = (state.expr.match(/\(/g) || []).length;
+      const closes = (state.expr.match(/\)/g) || []).length;
+      if (opens > closes && /[\d)%]$/.test(b)) setExpr(b + ')', a);
+    }
     clearStale();
   }
 
   function inputOperator(op) {
-    if (state.error) state.error = false;
+    state.error = false;
     if (state.justEvaluated) {
-      if (state.value !== null) {
-        state.expr = rawForInput(state.value);
-      }
-      state.justEvaluated = false;
-      state.value = null;
+      if (state.value !== null) setExpr(rawForInput(state.value));
+      leaveResult();
     }
-    if (state.expr === '') {
-      // Cho phép số âm ở đầu biểu thức.
-      if (op === '−') state.expr = '−';
-      return;
+    let [b, a] = parts();
+    if (b.endsWith('(')) {
+      if (op === '−') setExpr(b + op, a);                      // số âm đầu ngoặc
+      return clearStale();
     }
-    if (isOp(lastChar())) {
-      // Cho phép '−' ngay sau một toán tử khác để viết số âm, ví dụ 5×−3.
-      if (op === '−' && lastChar() !== '−') {
-        state.expr += op;
-      } else if (lastChar() === '−' && op === '−') {
-        // bỏ qua
-      } else {
-        state.expr = state.expr.slice(0, -1) + op;
+    if (b === '') {
+      if (op === '−') setExpr('−', a);                         // cho phép số âm ở đầu biểu thức
+      return clearStale();
+    }
+    if (/[+−×÷]$/.test(b)) {
+      if (op === '−' && !b.endsWith('−')) {
+        b += op;                                               // 5×−3: '−' sau toán tử để viết số âm
+      } else if (!(op === '−' && b.endsWith('−'))) {
+        b = b.slice(0, -1) + op;                               // thay toán tử cũ bằng toán tử mới
       }
     } else {
-      state.expr += op;
+      b += op;
     }
+    setExpr(b, a);
     clearStale();
   }
 
   function inputPercent() {
     if (state.justEvaluated) {
-      state.expr = state.value !== null ? rawForInput(state.value) : '';
-      state.justEvaluated = false;
-      state.value = null;
+      setExpr(state.value !== null ? rawForInput(state.value) : '');
+      leaveResult();
     }
-    if (/[\d]$/.test(state.expr)) state.expr += '%';
+    const [b, a] = parts();
+    if (/\d$/.test(b)) setExpr(b + '%', a);
     clearStale();
   }
 
   function toggleSign() {
     if (state.justEvaluated) {
-      state.expr = state.value !== null ? rawForInput(state.value) : '';
-      state.justEvaluated = false;
-      state.value = null;
+      setExpr(state.value !== null ? rawForInput(state.value) : '');
+      leaveResult();
     }
-    if (state.expr === '') { state.expr = '−'; return render(); }
-    if (isOp(lastChar())) return render();
+    const [b, a] = parts();
+    if (b === '') { setExpr('−', a); return render(); }
+    if (/[+−×÷]$/.test(b)) return render();
 
-    const seg = /[\d,]+%*$/.exec(state.expr);
+    const seg = /[\d,]+%*$/.exec(b);
     if (!seg) return render();
-    const pos = state.expr.length - seg[0].length;
-    const before = state.expr.slice(0, pos);
-    if (before.endsWith('−') && (before.length === 1 || isOp(before.slice(-2, -1)))) {
-      state.expr = before.slice(0, -1) + seg[0];
-    } else {
-      state.expr = before + '−' + seg[0];
-    }
+    const pre = b.slice(0, b.length - seg[0].length);
+    const head = pre.slice(0, -1);
+    let nb;
+    if (pre.endsWith('−') && (head === '' || /[+−×÷(]$/.test(head))) nb = head + seg[0];
+    else nb = pre + '−' + seg[0];
+    setExpr(nb, a);
     clearStale();
   }
 
   function backspace() {
     if (state.justEvaluated) {
-      state.justEvaluated = false;
-      state.value = null;
-      state.error = false;
-      state.expr = '';
+      clearResult();
       return render();
     }
-    state.expr = state.expr.slice(0, -1);
+    const [b, a] = parts();
+    if (!b) return render();
+    setExpr(b.slice(0, -1), a);
+    clearStale();
+  }
+
+  // Phím Delete: xóa ký tự ngay sau con trỏ (chỉ ở chế độ sửa).
+  function deleteAfter() {
+    if (!state.editMode || state.justEvaluated) return;
+    const [b, a] = parts();
+    if (!a) return render();
+    setExpr(b, a.slice(1));
     clearStale();
   }
 
   function clearAllState() {
-    state.expr = '';
-    state.value = null;
-    state.justEvaluated = false;
-    state.error = false;
+    clearResult();
     render();
   }
 
   // Khi người dùng sửa biểu thức sau kết quả, bỏ trạng thái kết quả cũ.
   function clearStale() {
-    state.justEvaluated = false;
-    state.value = null;
-    state.error = false;
+    leaveResult();
+    render();
+  }
+
+  // Di chuyển con trỏ trái/phải (chỉ ở chế độ sửa).
+  function moveCaret(d) {
+    if (!state.editMode) return;
+    leaveResult();
+    state.caret = clamp(caretPos() + d, 0, state.expr.length);
     render();
   }
 
@@ -293,6 +382,22 @@
     state.error = false;
     render();
     return true;
+  }
+
+  // Bật/tắt chế độ sửa. Khi bật, con trỏ nằm ở cuối biểu thức.
+  function setEditMode(on) {
+    state.editMode = on;
+    if (on) {
+      leaveResult();
+      state.caret = state.expr.length;
+    }
+    els.editToggle.textContent = on ? 'Sửa: Bật' : 'Sửa: Tắt';
+    els.editToggle.classList.toggle('on', on);
+    els.editToggle.setAttribute('aria-pressed', String(on));
+    els.caretLeft.hidden = !on;
+    els.caretRight.hidden = !on;
+    els.sub.classList.toggle('editing', on);
+    render();
   }
 
   // Bấm save: mở ô ghi chú trước, rồi mới lưu.
@@ -337,27 +442,104 @@
    * 4. Hiển thị
    * ========================================================== */
 
+  function makeCaret() {
+    const c = document.createElement('span');
+    c.className = 'caret';
+    return c;
+  }
+
+  // Dấu × ÷ màu vàng, các ký tự khác màu trắng.
+  // Mỗi đoạn có data-start = vị trí của nó trong biểu thức, để đổi vị trí con trỏ khi chạm.
+  // caretAt = -1 nghĩa là không vẽ con trỏ.
+  function colorExpr(text, caretAt) {
+    const wrap = document.createElement('span');
+    wrap.className = 'expr-text';
+    let plain = '';
+    let plainStart = 0;
+    const flush = () => {
+      if (!plain) return;
+      const s = document.createElement('span');
+      s.dataset.start = String(plainStart);
+      s.textContent = plain;
+      wrap.append(s);
+      plain = '';
+    };
+    let i = 0;
+    for (const ch of text) {
+      if (i === caretAt) { flush(); wrap.append(makeCaret()); }
+      if (ch === '×' || ch === '÷') {
+        flush();
+        const m = document.createElement('span');
+        m.className = 'op-mul';
+        m.dataset.start = String(i);
+        m.textContent = ch;
+        wrap.append(m);
+      } else {
+        if (!plain) plainStart = i;
+        plain += ch;
+      }
+      i++;
+    }
+    if (i === caretAt) { flush(); wrap.append(makeCaret()); }
+    flush();
+    return wrap;
+  }
+
+  // Kết quả (vàng, đậm) hiện ngay dưới thanh công cụ; biểu thức đầy đủ ở dưới.
   function render() {
     let main;
-    let sub = '';
+    let expr = state.expr;
+    let caretAt = -1;
     if (state.error) {
       main = 'Lỗi';
-      sub = state.expr;
     } else if (state.justEvaluated && state.value !== null) {
       main = formatValue(state.value);
-      sub = state.expr + ' =';
+      expr = state.expr + ' =';
     } else {
-      main = state.expr === '' ? '0' : state.expr;
-      if (state.expr !== '') {
-        const v = evaluate(state.expr);
-        if (v !== null) sub = '= ' + formatValue(v);
-      }
+      const v = state.expr === '' ? null : evaluate(state.expr);
+      main = v === null ? '0' : formatValue(v);
     }
+    if (state.editMode && !state.justEvaluated) caretAt = caretPos();
+
     els.main.textContent = main;
     els.main.classList.toggle('error', state.error);
     els.main.classList.toggle('long', !state.error && main.length > 9);
     els.main.classList.toggle('xlong', !state.error && main.length > 14);
-    els.sub.textContent = sub;
+    els.sub.replaceChildren(colorExpr(expr, caretAt));
+    followCaret();
+  }
+
+  // Cuộn biểu thức để con trỏ luôn hiện; không sửa thì cuộn xuống cuối.
+  function followCaret() {
+    const sub = els.sub;
+    const c = sub.querySelector('.caret');
+    if (!c) {
+      sub.scrollTop = sub.scrollHeight;
+      return;
+    }
+    const top = c.offsetTop;
+    const bottom = top + c.offsetHeight;
+    if (top < sub.scrollTop) sub.scrollTop = top;
+    else if (bottom > sub.scrollTop + sub.clientHeight) sub.scrollTop = bottom - sub.clientHeight + 12;
+  }
+
+  // Đổi tọa độ chạm thành vị trí con trỏ trong biểu thức (null nếu không trúng chữ).
+  function caretIndexAt(x, y) {
+    let node = null;
+    let off = 0;
+    if (document.caretPositionFromPoint) {
+      const p = document.caretPositionFromPoint(x, y);
+      if (p) { node = p.offsetNode; off = p.offset; }
+    } else if (document.caretRangeFromPoint) {
+      const r = document.caretRangeFromPoint(x, y);
+      if (r) { node = r.startContainer; off = r.startOffset; }
+    }
+    if (!node || node.nodeType !== Node.TEXT_NODE) return null;
+    const el = node.parentElement && node.parentElement.closest('[data-start]');
+    if (!el || !els.sub.contains(el)) return null;
+    const start = Number(el.dataset.start);
+    if (el.classList.contains('op-mul')) return start + (off > 0 ? 1 : 0);
+    return start + off;
   }
 
   let toastTimer = null;
@@ -385,28 +567,29 @@
       ['AC', 'clear', 'fn'],
       ['+/-', 'sign', 'fn'],
       ['%', 'percent', 'fn'],
-      [ICON.back, 'back', 'fn', { icon: true }],
-      [ICON.save, 'save', 'fn', { icon: true }],
+      ['(', 'lparen', 'fn'],
+      [')', 'rparen', 'fn'],
     ],
     [
       ['7', 'd7', 'num'], ['8', 'd8', 'num'], ['9', 'd9', 'num'],
       ['÷', 'op÷', 'op'],
-      [ICON.trash, 'trash', 'fn', { icon: true }],
+      [ICON.back, 'back', 'fn', { icon: true }],
     ],
     [
       ['4', 'd4', 'num'], ['5', 'd5', 'num'], ['6', 'd6', 'num'],
       ['×', 'op×', 'op'],
-      [ICON.list, 'history', 'fn', { icon: true }],
+      [ICON.save, 'save', 'fn', { icon: true }],
     ],
     [
       ['1', 'd1', 'num'], ['2', 'd2', 'num'], ['3', 'd3', 'num'],
       ['−', 'op−', 'op'],
-      ['=', 'equals', 'op', { equals: true }],
+      [ICON.list, 'history', 'fn', { icon: true }],
     ],
     [
       ['0', 'd0', 'num', { zero: true }],
       [',', 'comma', 'num'],
       ['+', 'op+', 'op'],
+      ['=', 'equals', 'op'],
     ],
   ];
 
@@ -434,6 +617,8 @@
   const ACTIONS = {
     clear: () => clearAllState(),
     trash: () => clearAllState(),
+    lparen: () => inputParen('('),
+    rparen: () => inputParen(')'),
     sign: () => toggleSign(),
     percent: () => inputPercent(),
     back: () => backspace(),
@@ -455,6 +640,27 @@
     if (fn) fn();
   });
 
+  // Thanh công cụ phía trên kết quả
+  els.editToggle.addEventListener('click', () => setEditMode(!state.editMode));
+  els.caretLeft.addEventListener('click', () => moveCaret(-1));
+  els.caretRight.addEventListener('click', () => moveCaret(1));
+  els.decimals.value = state.decimals;
+  els.decimals.addEventListener('change', () => {
+    state.decimals = els.decimals.value;
+    saveDecimals(state.decimals);
+    render();
+  });
+
+  // Chạm vào biểu thức khi đang sửa: đặt con trỏ tại vị trí đã chạm.
+  els.sub.addEventListener('click', (e) => {
+    if (!state.editMode) return;
+    const idx = caretIndexAt(e.clientX, e.clientY);
+    if (idx === null) return;
+    leaveResult();
+    state.caret = clamp(idx, 0, state.expr.length);
+    render();
+  });
+
   // Bàn phím vật lý (máy tính bảng, laptop)
   document.addEventListener('keydown', (e) => {
     if (!els.noteSheet.hidden) {
@@ -465,6 +671,12 @@
       if (e.key === 'Escape') closeHistory();
       return;
     }
+    if (e.target && e.target.tagName === 'SELECT') return;
+    if (state.editMode) {
+      if (e.key === 'ArrowLeft') { e.preventDefault(); return moveCaret(-1); }
+      if (e.key === 'ArrowRight') { e.preventDefault(); return moveCaret(1); }
+      if (e.key === 'Delete') return deleteAfter();
+    }
     if (/^[0-9]$/.test(e.key)) return inputDigit(e.key);
     if (e.key === ',' || e.key === '.') return inputComma();
     if (e.key === '+') return inputOperator('+');
@@ -472,6 +684,7 @@
     if (e.key === '*') return inputOperator('×');
     if (e.key === '/') return inputOperator('÷');
     if (e.key === '%') return inputPercent();
+    if (e.key === '(' || e.key === ')') return inputParen(e.key);
     if (e.key === 'Enter' || e.key === '=') { e.preventDefault(); return equals(); }
     if (e.key === 'Backspace') return backspace();
     if (e.key === 'Escape') return clearAllState();
@@ -570,10 +783,8 @@
     }
     body.append(dt);
     body.addEventListener('click', () => {
-      state.expr = rec.expr;
-      state.value = null;
-      state.justEvaluated = false;
-      state.error = false;
+      setExpr(rec.expr);
+      leaveResult();
       closeHistory();
       render();
     });
@@ -708,7 +919,7 @@
    * ========================================================== */
 
   buildKeys();
-  render();
+  setEditMode(false);
 
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {

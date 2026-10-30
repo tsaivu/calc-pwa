@@ -43,40 +43,51 @@ body {
 /* ---------- Display ---------- */
 .display {
   flex: 1 1 auto;
-  min-height: 140px;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
-  align-items: flex-end;
-  padding: 24px 8px 12px;
+  padding: 8px 8px 8px;
   overflow: hidden;
 }
 
-.sub {
-  font-size: 22px;
-  color: var(--muted);
-  min-height: 28px;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  direction: ltr;
-}
-
+/* Kết quả: vàng, đậm, nằm ngay dưới thanh trạng thái. */
 .main {
-  font-size: 80px;
-  font-weight: 300;
-  line-height: 1.05;
-  max-width: 100%;
-  overflow-x: auto;
+  flex: none;
+  color: #ffd60a;
+  font-size: 46px;
+  font-weight: 700;
+  line-height: 1.1;
+  text-align: right;
   white-space: nowrap;
-  scrollbar-width: none;
+  overflow: hidden;
   direction: ltr;
+  padding: 0 4px;
 }
-.main::-webkit-scrollbar { display: none; }
-.main.error { color: var(--danger); font-size: 56px; }
-.main.long { font-size: 52px; }
-.main.xlong { font-size: 36px; }
+.main.error { color: var(--danger); font-size: 40px; }
+.main.long { font-size: 38px; }
+.main.xlong { font-size: 30px; }
+
+/* Biểu thức đầy đủ: sát phía trên bàn phím, xuống dòng, cuộn tới phần cuối. */
+.expr-text { margin-top: auto; display: block; }
+.op-mul { color: #ffd60a; }
+.sub {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+  display: flex;
+  flex-direction: column;
+  font-size: 30px;
+  line-height: 1.3;
+  color: #fff;
+  text-align: right;
+  white-space: pre-wrap;
+  word-break: break-all;
+  direction: ltr;
+  padding: 10px 4px 12px;
+}
+.sub::-webkit-scrollbar { display: none; }
 
 /* ---------- Keypad ---------- */
 .keys {
@@ -304,3 +315,58 @@ body {
 .search-input:focus { border-color: var(--op); }
 .tool-row { display: flex; gap: 8px; justify-content: space-between; }
 .text-btn:disabled { color: #636366; cursor: default; }
+
+/* ---------- Thanh công cụ trên kết quả ---------- */
+.toolbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 4px 6px;
+  font-size: 15px;
+}
+.tool-chip {
+  appearance: none;
+  border: 0;
+  border-radius: 999px;
+  background: var(--fn);
+  color: var(--fn-text);
+  font: inherit;
+  font-size: 15px;
+  padding: 6px 12px;
+  cursor: pointer;
+  user-select: none;
+}
+.tool-chip.on { background: var(--op); color: #fff; }
+.tool-chip.arrow { padding: 6px 10px; }
+.tool-chip[hidden] { display: none; }
+.tool-select {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+.tool-select select {
+  appearance: none;
+  font: inherit;
+  font-size: 15px;
+  color: var(--text);
+  background: var(--fn);
+  border: 0;
+  border-radius: 999px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+/* Con trỏ chế độ sửa */
+.sub.editing { cursor: text; }
+.caret {
+  display: inline-block;
+  width: 2px;
+  height: 1.15em;
+  vertical-align: -0.2em;
+  background: #ffd60a;
+  animation: caret-blink 1s steps(1, end) infinite;
+}
+@keyframes caret-blink { 50% { opacity: 0; } }
