@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#000000">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Máy tính">
+  <title>Máy tính ghi lịch sử</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="calc">
+    <section class="display" aria-live="polite">
+      <div class="sub" id="sub"></div>
+      <div class="main" id="main">0</div>
+    </section>
+    <section class="keys" id="keys" aria-label="Bàn phím"></section>
+  </main>
+
+  <div class="overlay" id="history" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="histTitle">
+      <header>
+        <h2 id="histTitle">Lịch sử</h2>
+        <div class="sheet-actions">
+          <button type="button" id="clearAll" class="text-btn">Xóa tất cả</button>
+          <button type="button" id="closeHist" class="text-btn">Đóng</button>
+        </div>
+      </header>
+      <ul class="list" id="list"></ul>
+      <p class="empty" id="empty" hidden>Chưa có phép tính nào được lưu.</p>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
