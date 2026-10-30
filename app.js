@@ -1129,8 +1129,9 @@
     if (!target) return;
     if (selRow === null) return toast('Chọn một hạng mục trước khi bấm =');
     setCell(target.col, selRow, formatValue(v), expr);
-    renderCard();
     toast(`Đã ghi vào ${fieldLabel(target.col)}`);
+    // Ghi xong thì quay về màn hình Bảng luôn.
+    showScreen('table');
   }
 
   function renderCard() {
