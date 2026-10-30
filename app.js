@@ -226,6 +226,7 @@
     productNoMatch: document.getElementById('productNoMatch'),
     nameInput: document.getElementById('nameInput'),
     tableSave: document.getElementById('tableSave'),
+    detailToggle: document.getElementById('detailToggle'),
     specSheet: document.getElementById('specSheet'),
     specInput: document.getElementById('specInput'),
     specOk: document.getElementById('specOk'),
@@ -701,11 +702,25 @@
   };
   for (let d = 0; d <= 9; d++) ACTIONS[`d${d}`] = () => inputDigit(String(d));
 
+  // Bấm phím phản hồi ngay khi chạm xuống (pointerdown), không chờ nhả tay.
+  // Sự kiện click sau đó bị bỏ qua để tránh nhập đôi; phím bàn phím (Enter/Space) vẫn dùng click.
+  let lastKeyPointer = 0;
+  function pressKey(btn) {
+    const fn = ACTIONS[btn.dataset.action];
+    if (fn) fn();
+  }
+  els.keys.addEventListener('pointerdown', (e) => {
+    if (e.button !== undefined && e.button !== 0) return;
+    const btn = e.target.closest('button[data-action]');
+    if (!btn) return;
+    lastKeyPointer = Date.now();
+    pressKey(btn);
+  });
   els.keys.addEventListener('click', (e) => {
     const btn = e.target.closest('button[data-action]');
     if (!btn) return;
-    const fn = ACTIONS[btn.dataset.action];
-    if (fn) fn();
+    if (Date.now() - lastKeyPointer < 600) return;
+    pressKey(btn);
   });
 
   // Thanh công cụ phía trên kết quả
@@ -1154,9 +1169,23 @@
     return e;
   }
 
+  // Chế độ "Chi tiết": hiện thêm phép tính gốc dưới mỗi kết quả. Lưu theo máy xem.
+  let detailMode = (() => {
+    try { return localStorage.getItem('calc-detail') === '1'; } catch (_) { return false; }
+  })();
+
+  function setDetailMode(on) {
+    detailMode = on;
+    try { localStorage.setItem('calc-detail', on ? '1' : '0'); } catch (_) { /* bỏ qua */ }
+    buildGrid();
+  }
+
   function buildGrid() {
     const g = els.grid;
     g.replaceChildren();
+    g.classList.toggle('detail', detailMode);
+    els.detailToggle.textContent = detailMode ? 'Chi tiết: Bật' : 'Chi tiết: Tắt';
+    els.detailToggle.setAttribute('aria-pressed', String(detailMode));
 
     // Hàng tiêu đề: tên hạng mục (sửa được) và cột Tổng
     const head = mk('tr');
@@ -1194,7 +1223,18 @@
         const td = mk('td');
         const c = mk('button', 'cell');
         c.type = 'button';
-        c.textContent = r.cells[f.key] || '';
+        const result = r.cells[f.key] || '';
+        const formula = r.formulas && r.formulas[f.key];
+        if (detailMode && !f.text && formula) {
+          c.classList.add('detail');
+          const val = mk('span', 'cell-val');
+          val.textContent = result;
+          const fx = mk('span', 'cell-formula');
+          fx.textContent = formula;
+          c.append(val, fx);
+        } else {
+          c.textContent = result;
+        }
         c.addEventListener('click', () => (f.text ? openSpec(i) : openCalc(f.key, i)));
         td.append(c);
         tr.append(td);
@@ -1478,6 +1518,7 @@
     });
   }
 
+  els.detailToggle.addEventListener('click', () => setDetailMode(!detailMode));
   els.tableNew.addEventListener('click', newTable);
   els.paidInput.addEventListener('input', () => {
     table.paid = els.paidInput.value;
