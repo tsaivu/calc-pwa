@@ -175,6 +175,9 @@
     error: false,
   };
 
+  // Đang lưu cả bảng (không phải một phép tính) vào lịch sử?
+  let pendingTable = false;
+
   const els = {
     main: document.getElementById('main'),
     sub: document.getElementById('sub'),
@@ -199,6 +202,18 @@
     caretLeft: document.getElementById('caretLeft'),
     caretRight: document.getElementById('caretRight'),
     decimals: document.getElementById('decimals'),
+    calc: document.getElementById('calc'),
+    card: document.getElementById('card'),
+    cardTitle: document.getElementById('cardTitle'),
+    cardRows: document.getElementById('cardRows'),
+    cardBack: document.getElementById('cardBack'),
+    openTable: document.getElementById('openTable'),
+    tableScreen: document.getElementById('tableScreen'),
+    grid: document.getElementById('grid'),
+    totalVal: document.getElementById('totalVal'),
+    toCalc: document.getElementById('toCalc'),
+    tableHistory: document.getElementById('tableHistory'),
+    tableSave: document.getElementById('tableSave'),
   };
 
   const isOp = (ch) => OPERATORS.includes(ch);
@@ -381,6 +396,7 @@
     state.value = v;
     state.error = false;
     render();
+    if (target) writeResult(v, state.expr);
     return true;
   }
 
@@ -406,7 +422,19 @@
     if (!state.justEvaluated || state.error || state.value === null) {
       if (!equals()) return toast('Biểu thức chưa hợp lệ');
     }
+    pendingTable = false;
     els.notePreview.textContent = `${state.expr} = ${formatValue(state.value)}`;
+    openNoteSheet();
+  }
+
+  // Bấm Lưu ở màn hình Bảng: lưu cả bảng kèm ghi chú.
+  function saveTableRecord() {
+    pendingTable = true;
+    els.notePreview.textContent = `Bảng — tổng cuối cùng: ${formatValue(grandSum())}`;
+    openNoteSheet();
+  }
+
+  function openNoteSheet() {
     els.noteInput.value = '';
     els.noteSheet.hidden = false;
     setTimeout(() => els.noteInput.focus(), 50);
@@ -415,23 +443,40 @@
   function closeNoteSheet() {
     els.noteSheet.hidden = true;
     els.noteInput.blur();
+    pendingTable = false;
   }
 
   // Ghi chú để trống thì không lưu trường note.
   async function confirmSave() {
     const note = els.noteInput.value.trim();
-    const rec = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      expr: state.expr,
-      result: formatValue(state.value),
-      value: state.value,
-      createdAt: Date.now(),
-      ...(note ? { note } : {}),
-    };
+    const isTable = pendingTable;
+    let rec;
+    if (isTable) {
+      const total = grandSum();
+      rec = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        kind: 'table',
+        expr: 'Bảng tính',
+        result: formatValue(total),
+        value: total,
+        table: snapshotTable(),
+        createdAt: Date.now(),
+        ...(note ? { note } : {}),
+      };
+    } else {
+      rec = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        expr: state.expr,
+        result: formatValue(state.value),
+        value: state.value,
+        createdAt: Date.now(),
+        ...(note ? { note } : {}),
+      };
+    }
     closeNoteSheet();
     try {
       await dbAdd(rec);
-      toast('Đã lưu vào lịch sử');
+      toast(isTable ? 'Đã lưu bảng vào lịch sử' : 'Đã lưu vào lịch sử');
     } catch (err) {
       console.error(err);
       toast('Không thể lưu trên thiết bị này');
@@ -671,7 +716,8 @@
       if (e.key === 'Escape') closeHistory();
       return;
     }
-    if (e.target && e.target.tagName === 'SELECT') return;
+    if (!els.tableScreen.hidden) return;
+    if (e.target && (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT')) return;
     if (state.editMode) {
       if (e.key === 'ArrowLeft') { e.preventDefault(); return moveCaret(-1); }
       if (e.key === 'ArrowRight') { e.preventDefault(); return moveCaret(1); }
@@ -760,11 +806,11 @@
     const body = document.createElement('button');
     body.type = 'button';
     body.className = 'item-body';
-    body.title = 'Mở lại phép tính này';
+    body.title = rec.table ? 'Mở lại bảng này' : 'Mở lại phép tính này';
 
     const ex = document.createElement('div');
     ex.className = 'item-expr';
-    ex.textContent = `${rec.expr} =`;
+    ex.textContent = rec.table ? rec.expr : `${rec.expr} =`;
 
     const res = document.createElement('div');
     res.className = 'item-result';
@@ -783,6 +829,7 @@
     }
     body.append(dt);
     body.addEventListener('click', () => {
+      if (rec.table) return restoreTable(rec);
       setExpr(rec.expr);
       leaveResult();
       closeHistory();
@@ -825,6 +872,7 @@
         value: r.value,
         createdAt: r.createdAt,
         ...(r.note ? { note: r.note } : {}),
+        ...(r.table ? { kind: 'table', table: r.table } : {}),
       })),
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -866,6 +914,7 @@
       value: Number.isFinite(r.value) ? r.value : null,
       createdAt: r.createdAt,
       ...(r.note ? { note: r.note.slice(0, 200) } : {}),
+      ...(r.kind === 'table' && normalizeTable(r.table) ? { kind: 'table', table: normalizeTable(r.table) } : {}),
     }));
     if (!valid.length) return toast('Không có mục nào để nhập');
 
@@ -915,11 +964,246 @@
   });
 
   /* ==========================================================
-   * 7. Khởi động
+   * 7. Bảng: hạng mục là cột (Vỏ, Ruột, ...), trường là hàng (Q.cách, In, Gc, Giấy, Phụ phí, PS)
+   * Chạm một trường hoặc một ô → máy tính nhập cho trường đó; chọn hạng mục trên thẻ, bấm = để ghi kết quả.
+   * Cột Tổng: cộng theo trường. Hàng Tổng: cộng theo hạng mục. Ô cuối cùng: tổng tất cả.
+   * ========================================================== */
+
+  const TABLE_KEY = 'calc-table';
+  const FIELDS = [
+    { key: 'qcach', label: 'Q.cách' },
+    { key: 'in', label: 'In' },
+    { key: 'gc', label: 'Gc' },
+    { key: 'giay', label: 'Giấy' },
+    { key: 'pp', label: 'Phụ phí' },
+    { key: 'ps', label: 'PS' },
+  ];
+  const ITEM_COUNT = 18;
+  const fieldLabel = (key) => FIELDS.find((f) => f.key === key).label;
+
+  function blankTable() {
+    const rows = [];
+    for (let i = 0; i < ITEM_COUNT; i++) {
+      rows.push({ name: i === 0 ? 'Vỏ' : (i === 1 ? 'Ruột' : ''), cells: {}, formulas: {} });
+    }
+    return { rows };
+  }
+
+  // Kiểm tra và chuẩn hóa dữ liệu bảng (dùng khi tải, nhập file và khôi phục bản lưu).
+  function normalizeTable(t) {
+    if (!t || !Array.isArray(t.rows)) return null;
+    return {
+      rows: t.rows.map((r) => ({
+        name: typeof r.name === 'string' ? r.name : '',
+        cells: (r && typeof r.cells === 'object' && r.cells) || {},
+        formulas: (r && typeof r.formulas === 'object' && r.formulas) || {},
+      })),
+    };
+  }
+
+  function loadTable() {
+    try {
+      const t = normalizeTable(JSON.parse(localStorage.getItem(TABLE_KEY) || 'null'));
+      if (t) return t;
+    } catch (_) { /* hỏng thì dùng bảng trống */ }
+    return blankTable();
+  }
+
+  function saveTable() {
+    try {
+      localStorage.setItem(TABLE_KEY, JSON.stringify(table));
+    } catch (_) {
+      toast('Không lưu được bảng trên thiết bị này');
+    }
+  }
+
+  const table = loadTable();
+  const snapshotTable = () => JSON.parse(JSON.stringify(table));
+
+  // target: { col } là trường đang nhập. selRow: chỉ số hạng mục (cột) được chọn.
+  let target = null;
+  let selRow = null;
+
+  // Đọc số từ ô đã định dạng kiểu vi-VN (ví dụ "1.234,5"). Ô trống tính là 0.
+  function toNum(s) {
+    if (!s) return 0;
+    const n = Number(String(s).replace(/\./g, '').replace(',', '.'));
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  const getCell = (field, r) => table.rows[r].cells[field] || '';
+  const getFormula = (field, r) => table.rows[r].formulas[field] || '';
+
+  function setCell(field, r, v, expr) {
+    const row = table.rows[r];
+    row.cells[field] = v;
+    row.formulas[field] = expr;
+    saveTable();
+  }
+
+  const fieldSum = (key) => table.rows.reduce((s, r) => s + toNum(r.cells[key]), 0);
+  const itemSum = (r) => FIELDS.reduce((s, f) => s + toNum(table.rows[r].cells[f.key]), 0);
+  const grandSum = () => table.rows.reduce((s, _, r) => s + itemSum(r), 0);
+
+  function showScreen(name) {
+    const onTable = name === 'table';
+    if (onTable) {
+      target = null;
+      selRow = null;
+      buildGrid();
+    }
+    els.tableScreen.hidden = !onTable;
+    els.calc.hidden = onTable;
+    renderCard();
+    render();
+  }
+
+  function openCalc(field, row) {
+    target = { col: field };
+    selRow = row;
+    clearResult();
+    showScreen('calc');
+  }
+
+  function selectRow(i) {
+    selRow = i;
+    clearResult();
+    renderCard();
+    render();
+  }
+
+  // Bấm = trong chế độ bảng: ghi kết quả và công thức vào ô đang chọn.
+  function writeResult(v, expr) {
+    if (!target) return;
+    if (selRow === null) return toast('Chọn một hạng mục trước khi bấm =');
+    setCell(target.col, selRow, formatValue(v), expr);
+    renderCard();
+    toast(`Đã ghi vào ${fieldLabel(target.col)}`);
+  }
+
+  function renderCard() {
+    els.card.hidden = !target;
+    if (!target) return;
+    els.cardTitle.textContent = fieldLabel(target.col);
+    els.cardRows.replaceChildren(...table.rows.map((r, idx) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'card-row' + (idx === selRow ? ' sel' : '');
+      const n = document.createElement('span');
+      n.className = 'card-name';
+      n.textContent = r.name || `Hạng mục ${idx + 1}`;
+      const v = document.createElement('span');
+      v.className = 'card-val';
+      const f = getFormula(target.col, idx);
+      if (f) {
+        const fo = document.createElement('span');
+        fo.className = 'card-formula';
+        fo.textContent = `${f} =`;
+        v.append(fo);
+      }
+      const res = document.createElement('span');
+      res.textContent = getCell(target.col, idx);
+      v.append(res);
+      b.append(n, v);
+      b.addEventListener('click', () => selectRow(idx));
+      return b;
+    }));
+  }
+
+  // Tạo phần tử có class (nếu có).
+  function mk(tag, cls) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    return e;
+  }
+
+  function buildGrid() {
+    const g = els.grid;
+    g.replaceChildren();
+
+    // Hàng tiêu đề: tên hạng mục (sửa được) và cột Tổng
+    const head = mk('tr');
+    head.append(Object.assign(mk('th', 'sticky'), { textContent: 'Trường' }));
+    table.rows.forEach((r, i) => {
+      const th = mk('th');
+      const inp = mk('input', 'name-input');
+      inp.type = 'text';
+      inp.value = r.name;
+      inp.maxLength = 40;
+      inp.setAttribute('aria-label', `Tên hạng mục ${i + 1}`);
+      inp.addEventListener('change', () => {
+        r.name = inp.value.trim();
+        saveTable();
+      });
+      th.append(inp);
+      head.append(th);
+    });
+    head.append(Object.assign(mk('th', 'sum-head'), { textContent: 'Tổng' }));
+    g.append(head);
+
+    // Mỗi trường là một hàng, ô cuối là tổng theo trường
+    for (const f of FIELDS) {
+      const tr = mk('tr');
+      const th = mk('th', 'sticky');
+      const b = mk('button', 'col-head');
+      b.type = 'button';
+      b.textContent = f.label;
+      b.addEventListener('click', () => openCalc(f.key, null));
+      th.append(b);
+      tr.append(th);
+      table.rows.forEach((r, i) => {
+        const td = mk('td');
+        const c = mk('button', 'cell');
+        c.type = 'button';
+        c.textContent = r.cells[f.key] || '';
+        c.addEventListener('click', () => openCalc(f.key, i));
+        td.append(c);
+        tr.append(td);
+      });
+      tr.append(Object.assign(mk('td', 'sum'), { textContent: formatValue(fieldSum(f.key)) }));
+      g.append(tr);
+    }
+
+    // Hàng Tổng: tổng theo hạng mục và ô tổng cuối cùng
+    const foot = mk('tr', 'foot');
+    foot.append(Object.assign(mk('th', 'sticky'), { textContent: 'Tổng' }));
+    table.rows.forEach((_, i) => {
+      foot.append(Object.assign(mk('td', 'sum'), { textContent: formatValue(itemSum(i)) }));
+    });
+    foot.append(Object.assign(mk('td', 'sum grand'), { textContent: formatValue(grandSum()) }));
+    g.append(foot);
+
+    els.totalVal.textContent = formatValue(grandSum());
+  }
+
+  // Mở lại một bảng đã lưu trong lịch sử (thay bảng hiện tại).
+  function restoreTable(rec) {
+    if (!confirm('Thay bảng hiện tại bằng bảng đã lưu này?')) return;
+    const t = normalizeTable(rec.table);
+    if (!t) return toast('Bản lưu bảng bị lỗi');
+    table.rows.splice(0, table.rows.length, ...t.rows);
+    saveTable();
+    closeHistory();
+    showScreen('table');
+  }
+
+  els.openTable.addEventListener('click', () => showScreen('table'));
+  els.toCalc.addEventListener('click', () => {
+    target = null;
+    selRow = null;
+    showScreen('calc');
+  });
+  els.tableHistory.addEventListener('click', openHistory);
+  els.tableSave.addEventListener('click', saveTableRecord);
+  els.cardBack.addEventListener('click', () => showScreen('table'));
+
+  /* ==========================================================
+   * 8. Khởi động
    * ========================================================== */
 
   buildKeys();
   setEditMode(false);
+  showScreen('table');
 
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
@@ -930,7 +1214,7 @@
   }
 
   /* ==========================================================
-   * 8. Chặn zoom (pinch, double-tap, Ctrl+cuộn chuột)
+   * 9. Chặn zoom (pinch, double-tap, Ctrl+cuộn chuột)
    * ========================================================== */
   ['gesturestart', 'gesturechange', 'gestureend'].forEach((t) => {
     document.addEventListener(t, (e) => e.preventDefault(), { passive: false });

@@ -14,9 +14,33 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <main class="calc">
+  <section class="screen" id="tableScreen" hidden>
+    <header class="screen-head">
+      <h2>Bảng</h2>
+      <div class="head-actions">
+        <button type="button" id="tableHistory" class="tool-chip">Lịch sử</button>
+        <button type="button" id="tableSave" class="tool-chip on">Lưu</button>
+        <button type="button" id="toCalc" class="tool-chip">Máy tính</button>
+      </div>
+    </header>
+    <div class="grid-wrap"><table class="grid" id="grid"></table></div>
+    <div class="total-box">
+      <span class="total-label">Tổng cuối cùng</span>
+      <span id="totalVal"></span>
+    </div>
+  </section>
+
+  <main class="calc" id="calc">
+    <section class="card" id="card" hidden>
+      <div class="card-head">
+        <button type="button" id="cardBack" class="tool-chip">‹ Bảng</button>
+        <span class="card-title" id="cardTitle"></span>
+      </div>
+      <div class="card-rows" id="cardRows"></div>
+    </section>
     <section class="display" aria-live="polite">
       <div class="toolbar" role="toolbar" aria-label="Tùy chọn hiển thị">
+        <button type="button" id="openTable" class="tool-chip">Bảng</button>
         <button type="button" id="editToggle" class="tool-chip" aria-pressed="false">Sửa: Tắt</button>
         <button type="button" id="caretLeft" class="tool-chip arrow" hidden aria-label="Con trỏ sang trái">◀</button>
         <button type="button" id="caretRight" class="tool-chip arrow" hidden aria-label="Con trỏ sang phải">▶</button>

@@ -26,9 +26,8 @@ html, body {
   overflow: hidden;
   position: fixed;
   inset: 0;
-  /* Chặn cuộn trang, kéo giãn và zoom bằng cử chỉ chạm */
-  touch-action: pan-x pan-y;
-  touch-action: none;
+  /* Chặn zoom double-tap; pinch được chặn bằng JS */
+  touch-action: manipulation;
   -webkit-user-select: none;
   user-select: none;
 }
@@ -367,6 +366,114 @@ body {
   padding: 6px 12px;
   cursor: pointer;
 }
+
+/* ---------- Thẻ cột (khi nhập cho một cột trong bảng) ---------- */
+[hidden] { display: none !important; }
+.card {
+  flex: none;
+  background: var(--panel);
+  border-radius: 16px;
+  padding: 10px 10px 6px;
+  margin: 4px 4px 6px;
+}
+.card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+.card-title { font-size: 18px; font-weight: 600; }
+.card-rows { max-height: 30vh; overflow-y: auto; }
+.card-row {
+  appearance: none;
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid #2c2c2e;
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+  padding: 8px 6px;
+  cursor: pointer;
+  text-align: left;
+}
+.card-row.sel { background: var(--fn); color: #ffd60a; border-radius: 8px; }
+.card-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card-val { direction: ltr; font-weight: 600; white-space: nowrap; display: flex; flex-direction: column; align-items: flex-end; }
+.card-formula { font-size: 12px; font-weight: 400; color: var(--muted); }
+
+/* ---------- Màn hình bảng ---------- */
+.screen {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  padding: calc(env(safe-area-inset-top) + 8px) 12px calc(12px + env(safe-area-inset-bottom));
+}
+.screen-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.screen-head h2 { margin: 0; font-size: 22px; font-weight: 600; }
+.head-actions { display: flex; gap: 6px; }
+.head-actions .tool-chip { padding: 6px 10px; font-size: 14px; }
+.grid-wrap { flex: 1 1 auto; min-height: 0; overflow: auto; touch-action: pan-x pan-y; }
+.grid { border-collapse: separate; border-spacing: 0; font-size: 14px; width: max-content; min-width: 100%; }
+.grid th, .grid td { border-right: 1px solid #48484a; border-bottom: 1px solid #48484a; padding: 0; height: 34px; min-width: 78px; }
+.grid th { font-weight: 600; background: var(--panel); }
+.grid th.sticky, .grid td.sticky {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  min-width: 84px;
+  max-width: 84px;
+  background: var(--panel);
+}
+.grid th.sum-head { background: var(--panel); }
+.grid td.sum { color: var(--text); font-weight: 600; text-align: center; direction: ltr; padding: 0 4px; white-space: nowrap; }
+.grid .foot th, .grid .foot td { font-weight: 700; background: var(--panel); border-bottom: 0; }
+.grid td.sum.grand { color: #ffd60a; }
+.col-head, .cell {
+  appearance: none;
+  width: 100%;
+  height: 100%;
+  min-height: 34px;
+  background: none;
+  border: 0;
+  color: var(--text);
+  font: inherit;
+  padding: 0 3px;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+}
+.cell { color: #ffd60a; font-weight: 600; direction: ltr; }
+.name-input {
+  width: 100%;
+  height: 34px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  padding: 0 4px;
+  outline: none;
+}
+.total-box {
+  appearance: none;
+  flex: none;
+  margin-top: 12px;
+  text-align: left;
+  background: var(--panel);
+  border: 0;
+  border-radius: 14px;
+  padding: 12px 14px;
+  min-height: 84px;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.total-label { display: block; font-size: 22px; font-weight: 700; }
+#totalVal { display: block; margin-top: 6px; font-size: 24px; color: #ffd60a; font-weight: 700; direction: ltr; }
 
 /* Con trỏ chế độ sửa */
 .sub.editing { cursor: text; }
