@@ -101,6 +101,20 @@
     </div>
   </div>
 
+  <div class="overlay" id="specSheet" hidden>
+    <div class="sheet note-sheet" role="dialog" aria-modal="true" aria-labelledby="specTitle">
+      <header>
+        <h2 id="specTitle">Q. Cách</h2>
+        <div class="sheet-actions">
+          <button type="button" id="specCancel" class="text-btn">Hủy</button>
+          <button type="button" id="specOk" class="text-btn strong">Lưu</button>
+        </div>
+      </header>
+      <label class="note-label" for="specInput">Quy cách (D x R x C)</label>
+      <input type="text" id="specInput" class="note-input" maxlength="40" autocomplete="off" placeholder="Ví dụ: 35 x 15 x 28">
+    </div>
+  </div>
+
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script src="app.js"></script>

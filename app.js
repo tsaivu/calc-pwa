@@ -214,6 +214,10 @@
     toCalc: document.getElementById('toCalc'),
     tableHistory: document.getElementById('tableHistory'),
     tableSave: document.getElementById('tableSave'),
+    specSheet: document.getElementById('specSheet'),
+    specInput: document.getElementById('specInput'),
+    specOk: document.getElementById('specOk'),
+    specCancel: document.getElementById('specCancel'),
   };
 
   const isOp = (ch) => OPERATORS.includes(ch);
@@ -414,17 +418,6 @@
     els.caretRight.hidden = !on;
     els.sub.classList.toggle('editing', on);
     render();
-  }
-
-  // Bấm save: mở ô ghi chú trước, rồi mới lưu.
-  function saveCurrent() {
-    // Nếu chưa có kết quả thì tính trước.
-    if (!state.justEvaluated || state.error || state.value === null) {
-      if (!equals()) return toast('Biểu thức chưa hợp lệ');
-    }
-    pendingTable = false;
-    els.notePreview.textContent = `${state.expr} = ${formatValue(state.value)}`;
-    openNoteSheet();
   }
 
   // Bấm Lưu ở màn hình Bảng: lưu cả bảng kèm ghi chú.
@@ -667,7 +660,7 @@
     sign: () => toggleSign(),
     percent: () => inputPercent(),
     back: () => backspace(),
-    save: () => saveCurrent(),
+    save: () => saveTableRecord(), // lưu toàn bộ bảng kèm ghi chú
     history: () => openHistory(),
     comma: () => inputComma(),
     equals: () => equals(),
@@ -710,6 +703,10 @@
   document.addEventListener('keydown', (e) => {
     if (!els.noteSheet.hidden) {
       if (e.key === 'Escape') closeNoteSheet();
+      return;
+    }
+    if (!els.specSheet.hidden) {
+      if (e.key === 'Escape') closeSpec();
       return;
     }
     if (!els.history.hidden) {
@@ -971,42 +968,39 @@
 
   const TABLE_KEY = 'calc-table';
   const FIELDS = [
-    { key: 'qcach', label: 'Q.cách' },
-    { key: 'in', label: 'In' },
-    { key: 'gc', label: 'Gc' },
+    { key: 'qcach', label: 'Q. Cách', text: true }, // quy cách dạng chữ (D x R x C), không tính toán
     { key: 'giay', label: 'Giấy' },
+    { key: 'in', label: 'In' },
+    { key: 'gc', label: 'G.Công' },
     { key: 'pp', label: 'Phụ phí' },
-    { key: 'ps', label: 'PS' },
+    { key: 'ps', label: 'Phát sinh' },
   ];
-  const ITEM_COUNT = 18;
+  // Bảng chính có đúng hai hạng mục (cột): Vỏ và Ruột.
+  const ITEM_NAMES = ['Vỏ', 'Ruột'];
+  const ITEM_COUNT = ITEM_NAMES.length;
   const fieldLabel = (key) => FIELDS.find((f) => f.key === key).label;
 
-  function blankTable() {
+  // Kiểm tra và chuẩn hóa dữ liệu bảng (dùng khi tải, nhập file và khôi phục bản lưu).
+  function normalizeTable(t) {
+    const src = (t && Array.isArray(t.rows)) ? t.rows : [];
     const rows = [];
     for (let i = 0; i < ITEM_COUNT; i++) {
-      rows.push({ name: i === 0 ? 'Vỏ' : (i === 1 ? 'Ruột' : ''), cells: {}, formulas: {} });
+      const r = src[i] || {};
+      rows.push({
+        name: typeof r.name === 'string' && r.name ? r.name : ITEM_NAMES[i],
+        cells: (typeof r.cells === 'object' && r.cells) || {},
+        formulas: (typeof r.formulas === 'object' && r.formulas) || {},
+      });
     }
     return { rows };
   }
 
-  // Kiểm tra và chuẩn hóa dữ liệu bảng (dùng khi tải, nhập file và khôi phục bản lưu).
-  function normalizeTable(t) {
-    if (!t || !Array.isArray(t.rows)) return null;
-    return {
-      rows: t.rows.map((r) => ({
-        name: typeof r.name === 'string' ? r.name : '',
-        cells: (r && typeof r.cells === 'object' && r.cells) || {},
-        formulas: (r && typeof r.formulas === 'object' && r.formulas) || {},
-      })),
-    };
-  }
-
   function loadTable() {
     try {
-      const t = normalizeTable(JSON.parse(localStorage.getItem(TABLE_KEY) || 'null'));
-      if (t) return t;
-    } catch (_) { /* hỏng thì dùng bảng trống */ }
-    return blankTable();
+      return normalizeTable(JSON.parse(localStorage.getItem(TABLE_KEY) || 'null'));
+    } catch (_) {
+      return normalizeTable(null); // hỏng thì dùng bảng trống
+    }
   }
 
   function saveTable() {
@@ -1041,8 +1035,9 @@
     saveTable();
   }
 
+  const numericFields = FIELDS.filter((f) => !f.text);
   const fieldSum = (key) => table.rows.reduce((s, r) => s + toNum(r.cells[key]), 0);
-  const itemSum = (r) => FIELDS.reduce((s, f) => s + toNum(table.rows[r].cells[f.key]), 0);
+  const itemSum = (r) => numericFields.reduce((s, f) => s + toNum(table.rows[r].cells[f.key]), 0);
   const grandSum = () => table.rows.reduce((s, _, r) => s + itemSum(r), 0);
 
   function showScreen(name) {
@@ -1138,7 +1133,6 @@
       th.append(inp);
       head.append(th);
     });
-    head.append(Object.assign(mk('th', 'sum-head'), { textContent: 'Tổng' }));
     g.append(head);
 
     // Mỗi trường là một hàng, ô cuối là tổng theo trường
@@ -1148,7 +1142,10 @@
       const b = mk('button', 'col-head');
       b.type = 'button';
       b.textContent = f.label;
-      b.addEventListener('click', () => openCalc(f.key, null));
+      b.addEventListener('click', () => {
+        if (f.text) toast('Chạm vào ô của từng hạng mục để nhập');
+        else openCalc(f.key, null);
+      });
       th.append(b);
       tr.append(th);
       table.rows.forEach((r, i) => {
@@ -1156,11 +1153,10 @@
         const c = mk('button', 'cell');
         c.type = 'button';
         c.textContent = r.cells[f.key] || '';
-        c.addEventListener('click', () => openCalc(f.key, i));
+        c.addEventListener('click', () => (f.text ? openSpec(i) : openCalc(f.key, i)));
         td.append(c);
         tr.append(td);
       });
-      tr.append(Object.assign(mk('td', 'sum'), { textContent: formatValue(fieldSum(f.key)) }));
       g.append(tr);
     }
 
@@ -1170,7 +1166,6 @@
     table.rows.forEach((_, i) => {
       foot.append(Object.assign(mk('td', 'sum'), { textContent: formatValue(itemSum(i)) }));
     });
-    foot.append(Object.assign(mk('td', 'sum grand'), { textContent: formatValue(grandSum()) }));
     g.append(foot);
 
     els.totalVal.textContent = formatValue(grandSum());
@@ -1186,6 +1181,38 @@
     closeHistory();
     showScreen('table');
   }
+
+  // Nhập quy cách (Q.cách) dạng chữ cho một hạng mục.
+  let specRow = null;
+
+  function openSpec(row) {
+    specRow = row;
+    els.specInput.value = table.rows[row].cells.qcach || '';
+    els.specSheet.hidden = false;
+    setTimeout(() => els.specInput.focus(), 50);
+  }
+
+  function closeSpec() {
+    els.specSheet.hidden = true;
+    els.specInput.blur();
+    specRow = null;
+  }
+
+  function saveSpec() {
+    if (specRow === null) return closeSpec();
+    setCell('qcach', specRow, els.specInput.value.trim(), '');
+    closeSpec();
+    buildGrid();
+  }
+
+  els.specOk.addEventListener('click', saveSpec);
+  els.specCancel.addEventListener('click', closeSpec);
+  els.specSheet.addEventListener('click', (e) => {
+    if (e.target === els.specSheet) closeSpec();
+  });
+  els.specInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); saveSpec(); }
+  });
 
   els.openTable.addEventListener('click', () => showScreen('table'));
   els.toCalc.addEventListener('click', () => {
