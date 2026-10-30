@@ -1,6 +1,7 @@
 // Service worker: cache toàn bộ giao diện để chạy offline.
-// Khi sửa file nào, tăng CACHE_VERSION để trình duyệt tải lại.
-const CACHE_VERSION = 'v2';
+// Chiến lược: luôn thử tải bản mới từ mạng trước; chỉ dùng bản đã lưu khi offline.
+// Khi đổi code, tăng CACHE_VERSION để xóa cache cũ.
+const CACHE_VERSION = 'v3';
 const CACHE_NAME = `calc-${CACHE_VERSION}`;
 
 const APP_SHELL = [
@@ -34,22 +35,21 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
-
-  event.respondWith(
-    caches.match(req, { ignoreSearch: true }).then((cached) => {
-      if (cached) return cached;
-      return fetch(req)
-        .then((res) => {
-          if (res && res.status === 200 && res.type === 'basic') {
-            const copy = res.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(req, copy));
-          }
-          return res;
-        })
-        .catch(() => {
-          if (req.mode === 'navigate') return caches.match('./index.html');
-          return Response.error();
-        });
-    })
-  );
+  event.respondWith(networkFirst(req));
 });
+
+async function networkFirst(req) {
+  const cache = await caches.open(CACHE_NAME);
+  try {
+    const res = await fetch(req);
+    if (res && res.status === 200 && res.type === 'basic') {
+      cache.put(req, res.clone());
+    }
+    return res;
+  } catch (_) {
+    const cached = await cache.match(req, { ignoreSearch: true });
+    if (cached) return cached;
+    if (req.mode === 'navigate') return cache.match('./index.html');
+    return Response.error();
+  }
+}

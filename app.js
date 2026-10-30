@@ -116,6 +116,18 @@
   const dbClear = () => run('readwrite', (s) => s.clear());
   const dbGetAll = () => run('readonly', (s) => s.getAll());
 
+  // Ghi nhiều bản ghi trong một giao dịch (dùng khi nhập file JSON).
+  function dbPutMany(list) {
+    return openDB().then((db) => new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readwrite');
+      const st = tx.objectStore(STORE);
+      for (const r of list) st.put(r);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    }));
+  }
+
   /* ==========================================================
    * 3. Trạng thái và thao tác bàn phím
    * ========================================================== */
@@ -143,6 +155,11 @@
     notePreview: document.getElementById('notePreview'),
     noteOk: document.getElementById('noteOk'),
     noteCancel: document.getElementById('noteCancel'),
+    search: document.getElementById('search'),
+    exportBtn: document.getElementById('exportBtn'),
+    importBtn: document.getElementById('importBtn'),
+    importFile: document.getElementById('importFile'),
+    noMatch: document.getElementById('noMatch'),
   };
 
   const isOp = (ch) => OPERATORS.includes(ch);
@@ -469,97 +486,203 @@
     hour: '2-digit', minute: '2-digit',
   });
 
+  // Bản ghi đã tải, giữ trong bộ nhớ để lọc nhanh khi gõ tìm kiếm.
+  let historyRecords = [];
+
+  // Bỏ dấu tiếng Việt và chữ hoa, để "giay" khớp với "Giấy".
+  function fold(s) {
+    return String(s || '')
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .replace(/đ/g, 'd')
+      .replace(/Đ/g, 'd')
+      .toLowerCase();
+  }
+
+  // Mỗi từ trong ô tìm kiếm phải xuất hiện trong ghi chú, biểu thức hoặc kết quả.
+  function matchesQuery(rec, query) {
+    const terms = fold(query).trim().split(/\s+/).filter(Boolean);
+    if (!terms.length) return true;
+    const hay = fold([rec.note, rec.expr, rec.result].join(' '));
+    return terms.every((t) => hay.includes(t));
+  }
+
   async function openHistory() {
     els.history.hidden = false;
-    await renderHistory();
+    await refreshHistory();
   }
 
   function closeHistory() {
     els.history.hidden = true;
   }
 
-  async function renderHistory() {
-    let records = [];
+  async function refreshHistory() {
     try {
-      records = await dbGetAll();
+      historyRecords = await dbGetAll();
+      historyRecords.sort((a, b) => b.createdAt - a.createdAt);
     } catch (err) {
       console.error(err);
+      historyRecords = [];
       toast('Không đọc được lịch sử');
     }
-    records.sort((a, b) => b.createdAt - a.createdAt);
+    drawList();
+  }
+
+  function drawList() {
+    const shown = historyRecords.filter((r) => matchesQuery(r, els.search.value));
 
     els.list.replaceChildren();
-    els.empty.hidden = records.length > 0;
-    els.clearAll.disabled = records.length === 0;
+    els.empty.hidden = historyRecords.length > 0;
+    els.noMatch.hidden = historyRecords.length === 0 || shown.length > 0;
+    els.clearAll.disabled = historyRecords.length === 0;
+    els.exportBtn.disabled = historyRecords.length === 0;
 
-    for (const rec of records) {
-      const li = document.createElement('li');
-      li.className = 'item';
+    for (const rec of shown) els.list.appendChild(buildItem(rec));
+  }
 
-      const body = document.createElement('button');
-      body.type = 'button';
-      body.className = 'item-body';
-      body.title = 'Mở lại phép tính này';
+  function buildItem(rec) {
+    const li = document.createElement('li');
+    li.className = 'item';
 
-      const ex = document.createElement('div');
-      ex.className = 'item-expr';
-      ex.textContent = `${rec.expr} =`;
+    const body = document.createElement('button');
+    body.type = 'button';
+    body.className = 'item-body';
+    body.title = 'Mở lại phép tính này';
 
-      const res = document.createElement('div');
-      res.className = 'item-result';
-      res.textContent = rec.result;
+    const ex = document.createElement('div');
+    ex.className = 'item-expr';
+    ex.textContent = `${rec.expr} =`;
 
-      const dt = document.createElement('div');
-      dt.className = 'item-date';
-      dt.textContent = dateFmt.format(new Date(rec.createdAt));
+    const res = document.createElement('div');
+    res.className = 'item-result';
+    res.textContent = rec.result;
 
-      body.append(ex, res);
-      if (rec.note) {
-        const nt = document.createElement('div');
-        nt.className = 'item-note';
-        nt.textContent = rec.note;
-        body.append(nt);
+    const dt = document.createElement('div');
+    dt.className = 'item-date';
+    dt.textContent = dateFmt.format(new Date(rec.createdAt));
+
+    body.append(ex, res);
+    if (rec.note) {
+      const nt = document.createElement('div');
+      nt.className = 'item-note';
+      nt.textContent = rec.note;
+      body.append(nt);
+    }
+    body.append(dt);
+    body.addEventListener('click', () => {
+      state.expr = rec.expr;
+      state.value = null;
+      state.justEvaluated = false;
+      state.error = false;
+      closeHistory();
+      render();
+    });
+
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'item-del';
+    del.setAttribute('aria-label', 'Xóa mục này');
+    del.textContent = '✕';
+    del.addEventListener('click', async () => {
+      try {
+        await dbDelete(rec.id);
+        historyRecords = historyRecords.filter((r) => r.id !== rec.id);
+        drawList();
+      } catch (err) {
+        console.error(err);
+        toast('Không xóa được');
       }
-      body.append(dt);
-      body.addEventListener('click', () => {
-        state.expr = rec.expr;
-        state.value = null;
-        state.justEvaluated = false;
-        state.error = false;
-        closeHistory();
-        render();
-      });
+    });
 
-      const del = document.createElement('button');
-      del.type = 'button';
-      del.className = 'item-del';
-      del.setAttribute('aria-label', 'Xóa mục này');
-      del.textContent = '✕';
-      del.addEventListener('click', async () => {
-        try {
-          await dbDelete(rec.id);
-          li.remove();
-          if (!els.list.children.length) {
-            els.empty.hidden = false;
-            els.clearAll.disabled = true;
-          }
-        } catch (err) {
-          console.error(err);
-          toast('Không xóa được');
-        }
-      });
+    li.append(body, del);
+    return li;
+  }
 
-      li.append(body, del);
-      els.list.appendChild(li);
+  /* ---------- Xuất / nhập file JSON ---------- */
+
+  function exportHistory() {
+    if (!historyRecords.length) return toast('Chưa có gì để xuất');
+    const payload = {
+      app: 'calc-history',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      count: historyRecords.length,
+      records: historyRecords.map((r) => ({
+        id: r.id,
+        expr: r.expr,
+        result: r.result,
+        value: r.value,
+        createdAt: r.createdAt,
+        ...(r.note ? { note: r.note } : {}),
+      })),
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const day = new Date().toISOString().slice(0, 10);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `lich-su-may-tinh-${day}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    toast(`Đã xuất ${historyRecords.length} mục`);
+  }
+
+  function isValidRecord(r) {
+    return r && typeof r.id === 'string' && typeof r.expr === 'string' &&
+      typeof r.result === 'string' && Number.isFinite(r.createdAt) &&
+      (r.note === undefined || typeof r.note === 'string');
+  }
+
+  // Nhập gộp: mục có cùng id sẽ được ghi đè, không tạo bản trùng.
+  async function importFromFile(file) {
+    let data;
+    try {
+      data = JSON.parse(await file.text());
+    } catch (_) {
+      return toast('File không hợp lệ');
+    }
+    const list = Array.isArray(data)
+      ? data
+      : (data && data.app === 'calc-history' && Array.isArray(data.records) ? data.records : null);
+    if (!list) return toast('File không đúng định dạng lịch sử');
+
+    const valid = list.filter(isValidRecord).map((r) => ({
+      id: r.id,
+      expr: r.expr,
+      result: r.result,
+      value: Number.isFinite(r.value) ? r.value : null,
+      createdAt: r.createdAt,
+      ...(r.note ? { note: r.note.slice(0, 200) } : {}),
+    }));
+    if (!valid.length) return toast('Không có mục nào để nhập');
+
+    try {
+      await dbPutMany(valid);
+      await refreshHistory();
+      toast(`Đã nhập ${valid.length} mục`);
+    } catch (err) {
+      console.error(err);
+      toast('Không nhập được');
     }
   }
+
+  els.exportBtn.addEventListener('click', exportHistory);
+  els.importBtn.addEventListener('click', () => els.importFile.click());
+  els.importFile.addEventListener('change', () => {
+    const f = els.importFile.files[0];
+    els.importFile.value = '';
+    if (f) importFromFile(f);
+  });
+  els.search.addEventListener('input', drawList);
 
   els.clearAll.addEventListener('click', async () => {
     if (!confirm('Xóa toàn bộ lịch sử trên thiết bị này?')) return;
     try {
       await dbClear();
       toast('Đã xóa lịch sử');
-      await renderHistory();
+      await refreshHistory();
     } catch (err) {
       console.error(err);
       toast('Không xóa được');

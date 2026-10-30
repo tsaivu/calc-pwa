@@ -287,3 +287,20 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ---------- Tìm kiếm và xuất/nhập ---------- */
+.tools { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+.search-input {
+  width: 100%;
+  font: inherit;
+  font-size: 16px;
+  color: var(--text);
+  background: var(--fn);
+  border: 1px solid #3a3a3c;
+  border-radius: 12px;
+  padding: 10px 14px;
+  outline: none;
+}
+.search-input:focus { border-color: var(--op); }
+.tool-row { display: flex; gap: 8px; justify-content: space-between; }
+.text-btn:disabled { color: #636366; cursor: default; }

@@ -31,8 +31,17 @@
           <button type="button" id="closeHist" class="text-btn">Đóng</button>
         </div>
       </header>
+      <div class="tools">
+        <input type="search" id="search" class="search-input" placeholder="Tìm theo ghi chú, biểu thức hoặc kết quả" autocomplete="off">
+        <div class="tool-row">
+          <button type="button" id="exportBtn" class="text-btn">Xuất JSON</button>
+          <button type="button" id="importBtn" class="text-btn">Nhập JSON</button>
+          <input type="file" id="importFile" accept=".json,application/json" hidden>
+        </div>
+      </div>
       <ul class="list" id="list"></ul>
       <p class="empty" id="empty" hidden>Chưa có phép tính nào được lưu.</p>
+      <p class="empty" id="noMatch" hidden>Không có mục nào khớp với tìm kiếm.</p>
     </div>
   </div>
 
