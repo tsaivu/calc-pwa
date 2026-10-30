@@ -253,3 +253,37 @@ body {
 @media (min-width: 600px) {
   .main { font-size: 96px; }
 }
+
+/* ---------- Note sheet ---------- */
+.note-sheet { padding-bottom: calc(20px + env(safe-area-inset-bottom)); }
+.note-preview {
+  font-size: 18px;
+  color: var(--muted);
+  direction: ltr;
+  padding: 8px 4px 16px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.note-label { font-size: 14px; color: var(--muted); padding: 0 4px 6px; display: block; }
+.note-input {
+  width: 100%;
+  font: inherit;
+  font-size: 18px;
+  color: var(--text);
+  background: var(--fn);
+  border: 1px solid #3a3a3c;
+  border-radius: 12px;
+  padding: 12px 14px;
+  outline: none;
+}
+.note-input:focus { border-color: var(--op); }
+.text-btn.strong { font-weight: 600; }
+.item-note {
+  font-size: 14px;
+  color: #d1d1d6;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

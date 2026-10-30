@@ -36,6 +36,21 @@
     </div>
   </div>
 
+  <div class="overlay" id="noteSheet" hidden>
+    <div class="sheet note-sheet" role="dialog" aria-modal="true" aria-labelledby="noteTitle">
+      <header>
+        <h2 id="noteTitle">Lưu phép tính</h2>
+        <div class="sheet-actions">
+          <button type="button" id="noteCancel" class="text-btn">Hủy</button>
+          <button type="button" id="noteOk" class="text-btn strong">Lưu</button>
+        </div>
+      </header>
+      <div class="note-preview" id="notePreview"></div>
+      <label class="note-label" for="noteInput">Ghi chú (không bắt buộc)</label>
+      <input type="text" id="noteInput" class="note-input" maxlength="200" autocomplete="off" placeholder="Ví dụ: Hộp giấy đơn hàng A">
+    </div>
+  </div>
+
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script src="app.js"></script>

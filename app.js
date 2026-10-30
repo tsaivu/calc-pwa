@@ -138,6 +138,11 @@
     clearAll: document.getElementById('clearAll'),
     closeHist: document.getElementById('closeHist'),
     toast: document.getElementById('toast'),
+    noteSheet: document.getElementById('noteSheet'),
+    noteInput: document.getElementById('noteInput'),
+    notePreview: document.getElementById('notePreview'),
+    noteOk: document.getElementById('noteOk'),
+    noteCancel: document.getElementById('noteCancel'),
   };
 
   const isOp = (ch) => OPERATORS.includes(ch);
@@ -273,18 +278,35 @@
     return true;
   }
 
-  async function saveCurrent() {
+  // Bấm save: mở ô ghi chú trước, rồi mới lưu.
+  function saveCurrent() {
     // Nếu chưa có kết quả thì tính trước.
     if (!state.justEvaluated || state.error || state.value === null) {
       if (!equals()) return toast('Biểu thức chưa hợp lệ');
     }
+    els.notePreview.textContent = `${state.expr} = ${formatValue(state.value)}`;
+    els.noteInput.value = '';
+    els.noteSheet.hidden = false;
+    setTimeout(() => els.noteInput.focus(), 50);
+  }
+
+  function closeNoteSheet() {
+    els.noteSheet.hidden = true;
+    els.noteInput.blur();
+  }
+
+  // Ghi chú để trống thì không lưu trường note.
+  async function confirmSave() {
+    const note = els.noteInput.value.trim();
     const rec = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       expr: state.expr,
       result: formatValue(state.value),
       value: state.value,
       createdAt: Date.now(),
+      ...(note ? { note } : {}),
     };
+    closeNoteSheet();
     try {
       await dbAdd(rec);
       toast('Đã lưu vào lịch sử');
@@ -418,6 +440,10 @@
 
   // Bàn phím vật lý (máy tính bảng, laptop)
   document.addEventListener('keydown', (e) => {
+    if (!els.noteSheet.hidden) {
+      if (e.key === 'Escape') closeNoteSheet();
+      return;
+    }
     if (!els.history.hidden) {
       if (e.key === 'Escape') closeHistory();
       return;
@@ -487,7 +513,14 @@
       dt.className = 'item-date';
       dt.textContent = dateFmt.format(new Date(rec.createdAt));
 
-      body.append(ex, res, dt);
+      body.append(ex, res);
+      if (rec.note) {
+        const nt = document.createElement('div');
+        nt.className = 'item-note';
+        nt.textContent = rec.note;
+        body.append(nt);
+      }
+      body.append(dt);
       body.addEventListener('click', () => {
         state.expr = rec.expr;
         state.value = null;
@@ -531,6 +564,15 @@
       console.error(err);
       toast('Không xóa được');
     }
+  });
+
+  els.noteOk.addEventListener('click', confirmSave);
+  els.noteCancel.addEventListener('click', closeNoteSheet);
+  els.noteSheet.addEventListener('click', (e) => {
+    if (e.target === els.noteSheet) closeNoteSheet();
+  });
+  els.noteInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); confirmSave(); }
   });
 
   els.closeHist.addEventListener('click', closeHistory);

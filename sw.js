@@ -1,6 +1,6 @@
 // Service worker: cache toàn bộ giao diện để chạy offline.
 // Khi sửa file nào, tăng CACHE_VERSION để trình duyệt tải lại.
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const CACHE_NAME = `calc-${CACHE_VERSION}`;
 
 const APP_SHELL = [
