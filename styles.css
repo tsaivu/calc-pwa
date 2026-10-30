@@ -400,6 +400,43 @@ body {
 .card-val { direction: ltr; font-weight: 600; white-space: nowrap; display: flex; flex-direction: column; align-items: flex-end; }
 .card-formula { font-size: 12px; font-weight: 400; color: var(--muted); }
 
+/* ---------- Màn hình Sản phẩm ---------- */
+.list-tools { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.list-tools .search-input { flex: 1 1 auto; min-width: 0; }
+.list-tools .tool-chip { flex: none; padding: 8px 14px; font-size: 18px; }
+.product-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.item-edit {
+  appearance: none;
+  background: none;
+  border: 0;
+  color: var(--op);
+  font-size: 20px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  cursor: pointer;
+  flex: none;
+}
+.product-name { font-size: 18px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.product-card { display: block; padding: 10px 4px; }
+.product-top { display: flex; align-items: center; gap: 6px; }
+.product-top .product-name { flex: 1; min-width: 0; }
+.product-top .item-edit, .product-top .item-del { width: 34px; height: 34px; font-size: 18px; }
+.product-body {
+  display: block;
+  width: 100%;
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  padding: 4px 0 0;
+  cursor: pointer;
+}
+.product-line { display: flex; justify-content: space-between; align-items: baseline; font-size: 17px; padding: 2px 0; }
+.product-label { color: var(--text); }
+.product-val { font-weight: 600; direction: ltr; font-variant-numeric: tabular-nums; }
+
 /* ---------- Màn hình bảng ---------- */
 .screen {
   position: fixed;
@@ -408,8 +445,12 @@ body {
   background: var(--bg);
   display: flex;
   flex-direction: column;
-  padding: calc(env(safe-area-inset-top) + 8px) 12px calc(12px + env(safe-area-inset-bottom));
+  padding: max(20px, calc(env(safe-area-inset-top) + 8px)) 12px calc(12px + env(safe-area-inset-bottom));
 }
+/* Hàng nút trên cùng, cách mép để không bị tai thỏ che */
+.table-head { justify-content: space-between; gap: 6px; margin-bottom: 4px; }
+.table-head .tool-chip { padding: 6px 12px; font-size: 14px; }
+.table-title { margin: 4px 0 8px; text-align: center; font-size: 20px; font-weight: 600; }
 .screen-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
 .screen-head h2 { margin: 0; font-size: 22px; font-weight: 600; }
 .head-actions { display: flex; gap: 6px; }
@@ -477,7 +518,23 @@ body {
   cursor: pointer;
 }
 .total-label { display: block; font-size: 22px; font-weight: 700; }
-#totalVal { display: block; margin-top: 6px; font-size: 24px; color: #ffd60a; font-weight: 700; direction: ltr; }
+.total-row { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; font-size: 18px; }
+.paid-input {
+  width: 55%;
+  font: inherit;
+  font-size: 18px;
+  color: var(--text);
+  background: var(--fn);
+  border: 1px solid #3a3a3c;
+  border-radius: 10px;
+  padding: 4px 10px;
+  text-align: right;
+  direction: ltr;
+  outline: none;
+}
+.paid-input:focus { border-color: var(--op); }
+#leftVal { font-weight: 700; color: #ffd60a; direction: ltr; }
+#totalVal { display: block; margin-top: 6px; font-size: 24px; color: #ffd60a; font-weight: 700; direction: ltr; text-align: right; }
 
 /* Con trỏ chế độ sửa */
 .sub.editing { cursor: text; }

@@ -212,12 +212,26 @@
     grid: document.getElementById('grid'),
     totalVal: document.getElementById('totalVal'),
     toCalc: document.getElementById('toCalc'),
-    tableHistory: document.getElementById('tableHistory'),
+    tableProducts: document.getElementById('tableProducts'),
+    tableNew: document.getElementById('tableNew'),
+    tableTitle: document.getElementById('tableTitle'),
+    paidInput: document.getElementById('paidInput'),
+    leftVal: document.getElementById('leftVal'),
+    productScreen: document.getElementById('productScreen'),
+    productList: document.getElementById('productList'),
+    productEmpty: document.getElementById('productEmpty'),
+    productBack: document.getElementById('productBack'),
+    productAdd: document.getElementById('productAdd'),
+    productSearch: document.getElementById('productSearch'),
+    productNoMatch: document.getElementById('productNoMatch'),
+    nameInput: document.getElementById('nameInput'),
     tableSave: document.getElementById('tableSave'),
     specSheet: document.getElementById('specSheet'),
     specInput: document.getElementById('specInput'),
     specOk: document.getElementById('specOk'),
     specCancel: document.getElementById('specCancel'),
+    specTitle: document.getElementById('specTitle'),
+    specLabel: document.getElementById('specLabel'),
   };
 
   const isOp = (ch) => OPERATORS.includes(ch);
@@ -422,15 +436,17 @@
 
   // Bấm Lưu ở màn hình Bảng: lưu cả bảng kèm ghi chú.
   function saveTableRecord() {
+    table.paid = els.paidInput.value;
     pendingTable = true;
     els.notePreview.textContent = `Bảng — tổng cuối cùng: ${formatValue(grandSum())}`;
-    openNoteSheet();
+    openNoteSheet(table.name || '');
   }
 
-  function openNoteSheet() {
+  function openNoteSheet(prefillName = '') {
+    els.nameInput.value = prefillName;
     els.noteInput.value = '';
     els.noteSheet.hidden = false;
-    setTimeout(() => els.noteInput.focus(), 50);
+    setTimeout(() => els.nameInput.focus(), 50);
   }
 
   function closeNoteSheet() {
@@ -443,15 +459,21 @@
   async function confirmSave() {
     const note = els.noteInput.value.trim();
     const isTable = pendingTable;
+    const name = els.nameInput.value.trim();
+    if (isTable) table.paid = els.paidInput.value;
+    if (isTable && !name) return toast('Nhập tên sản phẩm trước khi lưu');
     let rec;
     if (isTable) {
       const total = grandSum();
       rec = {
-        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        id: table.recId || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         kind: 'table',
-        expr: 'Bảng tính',
+        expr: name,
+        name,
         result: formatValue(total),
         value: total,
+        paid: toNum(table.paid),
+        left: total - toNum(table.paid),
         table: snapshotTable(),
         createdAt: Date.now(),
         ...(note ? { note } : {}),
@@ -469,6 +491,14 @@
     closeNoteSheet();
     try {
       await dbAdd(rec);
+      if (isTable) {
+        table.recId = rec.id;
+        table.name = name;
+        saveTable();
+        els.tableTitle.textContent = name;
+        saveTable();
+        openProducts(); // lưu xong quay về danh sách sản phẩm
+      }
       toast(isTable ? 'Đã lưu bảng vào lịch sử' : 'Đã lưu vào lịch sử');
     } catch (err) {
       console.error(err);
@@ -713,7 +743,7 @@
       if (e.key === 'Escape') closeHistory();
       return;
     }
-    if (!els.tableScreen.hidden) return;
+    if (!els.tableScreen.hidden || !els.productScreen.hidden) return;
     if (e.target && (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT')) return;
     if (state.editMode) {
       if (e.key === 'ArrowLeft') { e.preventDefault(); return moveCaret(-1); }
@@ -826,7 +856,7 @@
     }
     body.append(dt);
     body.addEventListener('click', () => {
-      if (rec.table) return restoreTable(rec);
+      if (rec.table) return openProduct(rec);
       setExpr(rec.expr);
       leaveResult();
       closeHistory();
@@ -869,6 +899,7 @@
         value: r.value,
         createdAt: r.createdAt,
         ...(r.note ? { note: r.note } : {}),
+        ...(r.name ? { name: r.name } : {}),
         ...(r.table ? { kind: 'table', table: r.table } : {}),
       })),
     };
@@ -911,6 +942,7 @@
       value: Number.isFinite(r.value) ? r.value : null,
       createdAt: r.createdAt,
       ...(r.note ? { note: r.note.slice(0, 200) } : {}),
+      ...(r.name ? { name: String(r.name).slice(0, 60) } : {}),
       ...(r.kind === 'table' && normalizeTable(r.table) ? { kind: 'table', table: normalizeTable(r.table) } : {}),
     }));
     if (!valid.length) return toast('Không có mục nào để nhập');
@@ -947,6 +979,9 @@
   });
 
   els.noteOk.addEventListener('click', confirmSave);
+  els.nameInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); els.noteInput.focus(); }
+  });
   els.noteCancel.addEventListener('click', closeNoteSheet);
   els.noteSheet.addEventListener('click', (e) => {
     if (e.target === els.noteSheet) closeNoteSheet();
@@ -992,7 +1027,13 @@
         formulas: (typeof r.formulas === 'object' && r.formulas) || {},
       });
     }
-    return { rows };
+    // recId: id sản phẩm đang mở (để Lưu cập nhật đúng sản phẩm đó); name: tên sản phẩm.
+    return {
+      rows,
+      recId: (t && t.recId) || null,
+      name: (t && typeof t.name === 'string') ? t.name : '',
+      paid: (t && typeof t.paid === 'string') ? t.paid : '',
+    };
   }
 
   function loadTable() {
@@ -1012,7 +1053,7 @@
   }
 
   const table = loadTable();
-  const snapshotTable = () => JSON.parse(JSON.stringify(table));
+  const snapshotTable = () => JSON.parse(JSON.stringify({ rows: table.rows }));
 
   // target: { col } là trường đang nhập. selRow: chỉ số hạng mục (cột) được chọn.
   let target = null;
@@ -1048,6 +1089,7 @@
       buildGrid();
     }
     els.tableScreen.hidden = !onTable;
+    els.productScreen.hidden = true;
     els.calc.hidden = onTable;
     renderCard();
     render();
@@ -1168,26 +1210,150 @@
     });
     g.append(foot);
 
-    els.totalVal.textContent = formatValue(grandSum());
+    renderTotals();
+    els.tableTitle.textContent = table.name || 'Bảng';
   }
 
-  // Mở lại một bảng đã lưu trong lịch sử (thay bảng hiện tại).
-  function restoreTable(rec) {
-    if (!confirm('Thay bảng hiện tại bằng bảng đã lưu này?')) return;
+  // Mở một sản phẩm đã lưu thành bảng tính. Sản phẩm đang mở được tự lưu, không hỏi lại.
+  // Chỉ hỏi khi bảng hiện tại là bảng mới chưa có tên sản phẩm và còn số liệu.
+  async function openProduct(rec) {
+    closeHistory();
+    if (table.recId === rec.id) return showScreen('table');
+    const hasData = table.rows.some((r) => Object.values(r.cells).some((v) => v));
+    if (!table.recId && hasData && !confirm('Bảng hiện tại chưa lưu sẽ bị thay thế. Tiếp tục?')) return;
     const t = normalizeTable(rec.table);
     if (!t) return toast('Bản lưu bảng bị lỗi');
+    if (table.recId) await autoSaveCurrent();
     table.rows.splice(0, table.rows.length, ...t.rows);
+    table.recId = rec.id;
+    table.name = rec.name || rec.expr || '';
+    table.paid = rec.paid ? formatValue(rec.paid) : '';
     saveTable();
-    closeHistory();
     showScreen('table');
   }
 
+  /* ---------- Màn hình Sản phẩm: mỗi dòng là một bảng đã lưu (tên + tổng cuối cùng) ---------- */
+  let productRecords = [];
+
+  async function openProducts() {
+    els.tableScreen.hidden = true;
+    els.calc.hidden = true;
+    els.productScreen.hidden = false;
+    await loadProducts();
+  }
+
+  async function loadProducts() {
+    try {
+      const all = await dbGetAll();
+      productRecords = all.filter((r) => r.table).sort((a, b) => b.createdAt - a.createdAt);
+    } catch (err) {
+      console.error(err);
+      productRecords = [];
+      toast('Không đọc được danh sách sản phẩm');
+    }
+    drawProducts();
+  }
+
+  function drawProducts() {
+    const shown = productRecords.filter((r) => matchesQuery(r, els.productSearch.value));
+    els.productList.replaceChildren(...shown.map((r) => buildProductItem(r)));
+    els.productEmpty.hidden = productRecords.length > 0;
+    els.productNoMatch.hidden = productRecords.length === 0 || shown.length > 0;
+  }
+
+  function productLine(label, value) {
+    const l = mk('div', 'product-line');
+    const a = mk('span', 'product-label');
+    a.textContent = label;
+    const b = mk('span', 'product-val');
+    b.textContent = value;
+    l.append(a, b);
+    return l;
+  }
+
+  function buildProductItem(rec) {
+    const li = mk('li', 'item product-card');
+
+    // Dòng 1: tên sản phẩm cùng với nút sửa, xóa
+    const name = mk('div', 'product-name');
+    name.textContent = rec.name || rec.expr || 'Chưa đặt tên';
+
+    // Các dòng bên dưới: bấm vào để mở bảng tính
+    const body = mk('button', 'product-body');
+    body.type = 'button';
+    body.title = 'Mở bảng tính của sản phẩm này';
+    const total = mk('div', 'product-line');
+    const lbl = mk('span', 'product-label');
+    lbl.textContent = 'Tổng tiền';
+    const val = mk('span', 'product-val');
+    val.textContent = rec.result;
+    total.append(lbl, val);
+    const paidNum = typeof rec.paid === 'number' ? rec.paid : 0;
+    const leftNum = typeof rec.left === 'number' ? rec.left : (rec.value || 0) - paidNum;
+    body.append(total, productLine('Đã trả', formatValue(paidNum)), productLine('Còn lại', formatValue(leftNum)));
+    if (rec.note) {
+      const nt = mk('div', 'item-note');
+      nt.textContent = rec.note;
+      body.append(nt);
+    }
+    const dt = mk('div', 'item-date');
+    dt.textContent = dateFmt.format(new Date(rec.createdAt));
+    body.append(dt);
+    body.addEventListener('click', () => openProduct(rec));
+
+    const edit = mk('button', 'item-edit');
+    edit.type = 'button';
+    edit.setAttribute('aria-label', 'Sửa tên sản phẩm này');
+    edit.textContent = '✎';
+    edit.addEventListener('click', () => openRename(rec));
+
+    const del = mk('button', 'item-del');
+    del.type = 'button';
+    del.setAttribute('aria-label', 'Xóa sản phẩm này');
+    del.textContent = '✕';
+    del.addEventListener('click', async () => {
+      if (!confirm('Xóa bảng này khỏi lịch sử?')) return;
+      try {
+        await dbDelete(rec.id);
+        productRecords = productRecords.filter((r) => r.id !== rec.id);
+        if (table.recId === rec.id) { table.recId = null; saveTable(); }
+        drawProducts();
+      } catch (err) {
+        console.error(err);
+        toast('Không xóa được');
+      }
+    });
+
+    const top = mk('div', 'product-top');
+    top.append(name, edit, del);
+    li.append(top, body);
+    return li;
+  }
+
   // Nhập quy cách (Q.cách) dạng chữ cho một hạng mục.
+  // Ô nhập dùng chung: 'qcach' (quy cách một hạng mục) hoặc 'rename' (sửa tên sản phẩm).
   let specRow = null;
+  let specMode = 'qcach';
+  let renameId = null;
 
   function openSpec(row) {
+    specMode = 'qcach';
     specRow = row;
+    els.specTitle.textContent = 'Q. Cách';
+    els.specLabel.textContent = 'Quy cách (D x R x C)';
+    els.specInput.placeholder = 'Ví dụ: 35 x 15 x 28';
     els.specInput.value = table.rows[row].cells.qcach || '';
+    els.specSheet.hidden = false;
+    setTimeout(() => els.specInput.focus(), 50);
+  }
+
+  function openRename(rec) {
+    specMode = 'rename';
+    renameId = rec.id;
+    els.specTitle.textContent = 'Sửa tên sản phẩm';
+    els.specLabel.textContent = 'Tên sản phẩm';
+    els.specInput.placeholder = 'Ví dụ: Túi PE 35x15x28';
+    els.specInput.value = rec.name || '';
     els.specSheet.hidden = false;
     setTimeout(() => els.specInput.focus(), 50);
   }
@@ -1196,9 +1362,57 @@
     els.specSheet.hidden = true;
     els.specInput.blur();
     specRow = null;
+    renameId = null;
+  }
+
+  async function saveRename() {
+    const name = els.specInput.value.trim();
+    if (!name) return toast('Nhập tên sản phẩm');
+    const rec = productRecords.find((r) => r.id === renameId);
+    if (!rec) return closeSpec();
+    rec.name = name;
+    rec.expr = name;
+    try {
+      await dbAdd(rec); // ghi đè theo id
+      closeSpec();
+      drawProducts();
+      toast('Đã sửa tên');
+    } catch (err) {
+      console.error(err);
+      toast('Không sửa được tên');
+    }
+  }
+
+  // Sản phẩm mới: hỏi tên, rồi mở bảng trống mang tên đó (lưu khi bấm Lưu trên bảng).
+  function openNewProduct() {
+    const hasData = table.rows.some((r) => Object.values(r.cells).some((v) => v));
+    if (!table.recId && hasData && !confirm('Bảng hiện tại chưa lưu sẽ bị thay thế. Tiếp tục?')) return;
+    specMode = 'newProduct';
+    specRow = null;
+    renameId = null;
+    els.specTitle.textContent = 'Sản phẩm mới';
+    els.specLabel.textContent = 'Tên sản phẩm';
+    els.specInput.placeholder = 'Ví dụ: Túi PE 35x15x28';
+    els.specInput.value = '';
+    els.specSheet.hidden = false;
+    setTimeout(() => els.specInput.focus(), 50);
+  }
+
+  async function createProduct(name) {
+    if (!name) return toast('Nhập tên sản phẩm');
+    if (table.recId) await autoSaveCurrent();
+    table.rows.splice(0, table.rows.length, ...normalizeTable(null).rows);
+    table.recId = null;
+    table.name = name;
+    table.paid = '';
+    saveTable();
+    closeSpec();
+    showScreen('table');
   }
 
   function saveSpec() {
+    if (specMode === 'newProduct') return createProduct(els.specInput.value.trim());
+    if (specMode === 'rename') return saveRename();
     if (specRow === null) return closeSpec();
     setCell('qcach', specRow, els.specInput.value.trim(), '');
     closeSpec();
@@ -1220,7 +1434,60 @@
     selRow = null;
     showScreen('calc');
   });
-  els.tableHistory.addEventListener('click', openHistory);
+  // Tạo bảng mới trống. Nếu bảng hiện tại có số liệu thì hỏi trước, tránh ghi đè.
+  async function newTable() {
+    const hasData = table.rows.some((r) => Object.values(r.cells).some((v) => v));
+    if (!table.recId && hasData && !confirm('Bảng hiện tại chưa lưu sẽ bị xóa. Tạo bảng mới?')) return;
+    if (table.recId) await autoSaveCurrent();
+    table.rows.splice(0, table.rows.length, ...normalizeTable(null).rows);
+    table.recId = null;
+    table.name = '';
+    table.paid = '';
+    saveTable();
+    buildGrid();
+    toast('Đã tạo bảng mới');
+  }
+
+  // Tổng cuối cùng, phần đã trả và còn lại.
+  function renderTotals() {
+    const grand = grandSum();
+    const paid = toNum(table.paid);
+    els.totalVal.textContent = formatValue(grand);
+    if (document.activeElement !== els.paidInput) els.paidInput.value = table.paid;
+    els.leftVal.textContent = formatValue(grand - paid);
+  }
+
+  // Ghi bảng đang mở vào đúng sản phẩm của nó, không hỏi lại.
+  async function autoSaveCurrent() {
+    if (!table.recId) return;
+    const old = productRecords.find((r) => r.id === table.recId) || {};
+    const grand = grandSum();
+    const paid = toNum(table.paid);
+    await dbAdd({
+      id: table.recId,
+      kind: 'table',
+      expr: table.name || 'Chưa đặt tên',
+      name: table.name || '',
+      result: formatValue(grand),
+      value: grand,
+      paid,
+      left: grand - paid,
+      table: snapshotTable(),
+      createdAt: old.createdAt || Date.now(),
+      ...(old.note ? { note: old.note } : {}),
+    });
+  }
+
+  els.tableNew.addEventListener('click', newTable);
+  els.paidInput.addEventListener('input', () => {
+    table.paid = els.paidInput.value;
+    saveTable();
+    renderTotals();
+  });
+  els.tableProducts.addEventListener('click', openProducts);
+  els.productBack.addEventListener('click', () => showScreen('table'));
+  els.productAdd.addEventListener('click', openNewProduct);
+  els.productSearch.addEventListener('input', drawProducts);
   els.tableSave.addEventListener('click', saveTableRecord);
   els.cardBack.addEventListener('click', () => showScreen('table'));
 

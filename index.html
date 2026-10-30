@@ -15,19 +15,40 @@
 </head>
 <body>
   <section class="screen" id="tableScreen" hidden>
-    <header class="screen-head">
-      <h2>Bảng</h2>
-      <div class="head-actions">
-        <button type="button" id="tableHistory" class="tool-chip">Lịch sử</button>
-        <button type="button" id="tableSave" class="tool-chip on">Lưu</button>
-        <button type="button" id="toCalc" class="tool-chip">Máy tính</button>
-      </div>
+    <header class="screen-head table-head">
+      <button type="button" id="tableProducts" class="tool-chip">Danh sách</button>
+      <button type="button" id="tableNew" class="tool-chip" aria-label="Tạo bảng mới">+</button>
+      <button type="button" id="toCalc" class="tool-chip">Máy tính</button>
+      <button type="button" id="tableSave" class="tool-chip on">Lưu</button>
     </header>
+    <h2 class="table-title" id="tableTitle">Bảng</h2>
     <div class="grid-wrap"><table class="grid" id="grid"></table></div>
     <div class="total-box">
-      <span class="total-label">Tổng cuối cùng</span>
+      <span class="total-label">TỔNG</span>
       <span id="totalVal"></span>
+      <div class="total-row">
+        <span>Đã trả</span>
+        <input type="text" inputmode="decimal" id="paidInput" class="paid-input" placeholder="0" aria-label="Số tiền đã trả">
+      </div>
+      <div class="total-row">
+        <span>Còn lại</span>
+        <span id="leftVal"></span>
+      </div>
     </div>
+  </section>
+
+  <section class="screen" id="productScreen" hidden>
+    <header class="screen-head">
+      <h2>Danh sách</h2>
+      <button type="button" id="productBack" class="tool-chip">Quay lại</button>
+    </header>
+    <div class="list-tools">
+      <input type="search" id="productSearch" class="search-input" placeholder="Tìm tên, ghi chú, số tiền" autocomplete="off">
+      <button type="button" id="productAdd" class="tool-chip" aria-label="Sản phẩm mới">+</button>
+    </div>
+    <ul class="list product-list" id="productList"></ul>
+    <p class="empty" id="productEmpty" hidden>Chưa có sản phẩm nào. Lập bảng rồi bấm Lưu để lưu lại.</p>
+    <p class="empty" id="productNoMatch" hidden>Không có sản phẩm nào khớp với tìm kiếm.</p>
   </section>
 
   <main class="calc" id="calc">
@@ -96,6 +117,8 @@
         </div>
       </header>
       <div class="note-preview" id="notePreview"></div>
+      <label class="note-label" for="nameInput">Tên sản phẩm (bắt buộc khi lưu bảng)</label>
+      <input type="text" id="nameInput" class="note-input" maxlength="60" autocomplete="off" placeholder="Ví dụ: Túi PE 35x15x28">
       <label class="note-label" for="noteInput">Ghi chú (không bắt buộc)</label>
       <input type="text" id="noteInput" class="note-input" maxlength="200" autocomplete="off" placeholder="Ví dụ: Hộp giấy đơn hàng A">
     </div>
@@ -110,7 +133,7 @@
           <button type="button" id="specOk" class="text-btn strong">Lưu</button>
         </div>
       </header>
-      <label class="note-label" for="specInput">Quy cách (D x R x C)</label>
+      <label class="note-label" for="specInput" id="specLabel">Quy cách (D x R x C)</label>
       <input type="text" id="specInput" class="note-input" maxlength="40" autocomplete="off" placeholder="Ví dụ: 35 x 15 x 28">
     </div>
   </div>
