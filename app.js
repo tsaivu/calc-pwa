@@ -1184,8 +1184,10 @@
     const g = els.grid;
     g.replaceChildren();
     g.classList.toggle('detail', detailMode);
-    els.detailToggle.textContent = detailMode ? 'Chi tiết: Bật' : 'Chi tiết: Tắt';
+    els.detailToggle.classList.toggle('on', detailMode);
     els.detailToggle.setAttribute('aria-pressed', String(detailMode));
+    els.detailToggle.setAttribute('aria-label', detailMode ? 'Chi tiết: Bật' : 'Chi tiết: Tắt');
+    els.detailToggle.title = detailMode ? 'Đang xem chi tiết (bấm để tắt)' : 'Xem chi tiết';
 
     // Hàng tiêu đề: tên hạng mục (sửa được) và cột Tổng
     const head = mk('tr');

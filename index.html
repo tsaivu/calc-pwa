@@ -21,8 +21,13 @@
       <button type="button" id="toCalc" class="tool-chip">Máy tính</button>
       <button type="button" id="tableSave" class="tool-chip on">Lưu</button>
     </header>
-    <h2 class="table-title" id="tableTitle">Bảng</h2>
-    <div class="table-tools"><button type="button" id="detailToggle" class="tool-chip" aria-pressed="false">Chi tiết: Tắt</button></div>
+    <div class="table-title-row">
+      <span class="title-spacer" aria-hidden="true"></span>
+      <h2 class="table-title" id="tableTitle">Bảng</h2>
+      <button type="button" id="detailToggle" class="icon-btn" aria-pressed="false" aria-label="Chi tiết: Tắt" title="Xem chi tiết">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M3 5h18v2H3zM3 11h12v2H3zM3 17h18v2H3z"/></svg>
+      </button>
+    </div>
     <div class="grid-wrap"><table class="grid" id="grid"></table></div>
     <div class="total-box">
       <span class="total-label">TỔNG</span>
