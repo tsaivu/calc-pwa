@@ -929,6 +929,20 @@
     });
   }
 
+  /* ==========================================================
+   * 8. Chặn zoom (pinch, double-tap, Ctrl+cuộn chuột)
+   * ========================================================== */
+  ['gesturestart', 'gesturechange', 'gestureend'].forEach((t) => {
+    document.addEventListener(t, (e) => e.preventDefault(), { passive: false });
+  });
+  document.addEventListener('touchmove', (e) => {
+    if (e.touches.length > 1) e.preventDefault();
+  }, { passive: false });
+  document.addEventListener('wheel', (e) => {
+    if (e.ctrlKey) e.preventDefault();
+  }, { passive: false });
+  document.addEventListener('dblclick', (e) => e.preventDefault());
+
   // Cho phép kiểm thử từ console / test tự động.
   window.__calc = { evaluate, state };
 })();
