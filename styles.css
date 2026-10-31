@@ -557,3 +557,81 @@ body {
 .cell.detail { display: flex; flex-direction: column; justify-content: center; align-items: flex-end; min-height: 44px; padding: 3px 6px; line-height: 1.15; white-space: normal; }
 .cell-val { color: #ffd60a; font-weight: 600; font-size: 15px; direction: ltr; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cell-formula { color: #98989d; font-size: 11px; font-weight: 400; direction: ltr; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------- Bảng dòng: Trường | Quy cách | Giá ---------- */
+.grid-wrap { flex: 1 1 0; }
+.grid th, .grid td { height: var(--row-h, 40px); }
+.grid tr:first-child th { height: 34px; }
+.grid th.sticky { width: 27%; }
+.grid th.col-note { width: 43%; }
+.grid th.col-price { width: 30%; }
+.grid td.note-td { text-align: left; }
+.cell.note { display: flex; align-items: center; justify-content: flex-start; text-align: left; padding: 0 6px; font-weight: 400; color: var(--text); }
+.note-text {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden;
+  font-size: 13px; line-height: 1.2; word-break: break-word; white-space: normal; text-align: left;
+}
+.grid .col-head { white-space: normal; line-height: 1.15; font-weight: 600; padding: 0 6px; }
+.add-line {
+  appearance: none; border: 0; background: none; color: var(--text); font-size: 30px; line-height: 1;
+  display: block; margin: 4px 4px 0 auto; width: 44px; height: 40px; cursor: pointer; touch-action: manipulation;
+}
+.sub-val { font-weight: 700; direction: ltr; }
+.quote-label { display: inline-flex; align-items: center; gap: 8px; }
+.pct-wrap { display: inline-flex; align-items: center; gap: 2px; font-size: 16px; }
+.pct-input {
+  width: 52px; font: inherit; font-size: 16px; color: var(--text); background: var(--fn);
+  border: 1px solid #3a3a3c; border-radius: 8px; padding: 2px 6px; text-align: right;
+}
+.pct-input:focus { border-color: var(--op); outline: 0; }
+.quote-val { font-weight: 700; color: #ffd60a; direction: ltr; }
+.total-box { margin-top: 8px; padding: 10px 14px; }
+.total-row { margin-top: 6px; font-size: 17px; }
+#totalVal { margin-top: 2px; font-size: 22px; }
+.note-area { resize: none; font-size: 16px; line-height: 1.3; }
+.text-btn.danger { color: #ff453a; }
+.total-head { display: flex; justify-content: space-between; align-items: baseline; }
+#totalVal { display: inline; margin-top: 0; }
+
+/* Cột: Ghi chú rộng, Amount đủ 7 chữ số */
+.grid th.sticky { width: 22%; }
+.grid th.col-note { width: 50%; }
+.grid th.col-price { width: 28%; }
+.table-title-row { grid-template-columns: 80px 1fr 80px; }
+.title-spacer { width: 80px; }
+.title-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.icon-btn#addLine { font-size: 24px; line-height: 1; font-weight: 400; }
+.icon-btn { font: inherit; }
+.grand-line { display: flex; justify-content: space-between; align-items: baseline; padding: 8px 6px 0; font-size: 20px; font-weight: 700; }
+.grand-line #totalVal { color: #ffd60a; font-size: 22px; direction: ltr; }
+.total-box { margin-top: 8px; }
+
+/* Bàn phím gọn khi nhập giá cho một dòng của bảng: bỏ Lưu, Lịch sử, +/-, %; phím số và phép tính to hơn */
+.card-rows:empty { display: none; }
+.keys.compact { grid-template-columns: repeat(4, 1fr); }
+.keys.compact .key[data-action="sign"],
+.keys.compact .key[data-action="percent"],
+.keys.compact .key[data-action="save"],
+.keys.compact .key[data-action="history"] { display: none; }
+.keys.compact .key { aspect-ratio: 1 / 0.82; border-radius: 999px; font-size: 32px; }
+.keys.compact .key.zero { grid-column: 1; aspect-ratio: 1 / 0.82; }
+.keys.compact [data-action="clear"] { grid-area: 1 / 1; }
+.keys.compact [data-action="back"] { grid-area: 1 / 2; }
+.keys.compact [data-action="lparen"] { grid-area: 1 / 3; }
+.keys.compact [data-action="rparen"] { grid-area: 1 / 4; }
+.keys.compact [data-action="d7"] { grid-area: 2 / 1; }
+.keys.compact [data-action="d8"] { grid-area: 2 / 2; }
+.keys.compact [data-action="d9"] { grid-area: 2 / 3; }
+.keys.compact [data-action="op÷"] { grid-area: 2 / 4; }
+.keys.compact [data-action="d4"] { grid-area: 3 / 1; }
+.keys.compact [data-action="d5"] { grid-area: 3 / 2; }
+.keys.compact [data-action="d6"] { grid-area: 3 / 3; }
+.keys.compact [data-action="op×"] { grid-area: 3 / 4; }
+.keys.compact [data-action="d1"] { grid-area: 4 / 1; }
+.keys.compact [data-action="d2"] { grid-area: 4 / 2; }
+.keys.compact [data-action="d3"] { grid-area: 4 / 3; }
+.keys.compact [data-action="op−"] { grid-area: 4 / 4; }
+.keys.compact [data-action="d0"] { grid-area: 5 / 1; }
+.keys.compact [data-action="comma"] { grid-area: 5 / 2; }
+.keys.compact [data-action="op+"] { grid-area: 5 / 3; }
+.keys.compact [data-action="equals"] { grid-area: 5 / 4; }

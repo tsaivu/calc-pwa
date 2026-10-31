@@ -85,11 +85,13 @@
 
   // Mặc định: 15 chữ số có nghĩa, bỏ nhiễu số thực kiểu 4000000001.
   // Nếu người dùng chọn số chữ số thập phân cố định thì dùng bộ định dạng dưới.
-  const fmt = new Intl.NumberFormat('vi-VN', { maximumSignificantDigits: 15 });
+  // Mọi số lẻ làm tròn tối đa 2 chữ số sau dấu thập phân (bỏ số 0 thừa ở cuối).
+  const fmt = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 2 });
   const fixedFmt = [0, 1, 2, 3, 4, 5, 6].map((d) => new Intl.NumberFormat('vi-VN', {
     minimumFractionDigits: d,
     maximumFractionDigits: d,
   }));
+  const formatMoney = (v) => fmt.format(v); // dùng cho Bảng: luôn tối đa 2 chữ số thập phân
   const formatValue = (v) => (state.decimals === 'auto' ? fmt.format(v) : fixedFmt[Number(state.decimals)].format(v));
   // Số thô dạng dấu phẩy để đưa ngược vào biểu thức khi tiếp tục tính.
   const rawForInput = (v) => String(v).replace('.', ',');
@@ -227,6 +229,14 @@
     nameInput: document.getElementById('nameInput'),
     tableSave: document.getElementById('tableSave'),
     detailToggle: document.getElementById('detailToggle'),
+    gridWrap: document.getElementById('gridWrap'),
+    addLine: document.getElementById('addLine'),
+    unitVal: document.getElementById('unitVal'),
+    orderVal: document.getElementById('orderVal'),
+    quoteVal: document.getElementById('quoteVal'),
+    marginInput: document.getElementById('marginInput'),
+    specText: document.getElementById('specText'),
+    specDelete: document.getElementById('specDelete'),
     specSheet: document.getElementById('specSheet'),
     specInput: document.getElementById('specInput'),
     specOk: document.getElementById('specOk'),
@@ -439,7 +449,7 @@
   function saveTableRecord() {
     table.paid = els.paidInput.value;
     pendingTable = true;
-    els.notePreview.textContent = `Bảng — tổng cuối cùng: ${formatValue(grandSum())}`;
+    els.notePreview.textContent = `Bảng — tổng đơn: ${formatMoney(orderTotal())}`;
     openNoteSheet(table.name || '');
   }
 
@@ -465,13 +475,13 @@
     if (isTable && !name) return toast('Nhập tên sản phẩm trước khi lưu');
     let rec;
     if (isTable) {
-      const total = grandSum();
+      const total = orderTotal();
       rec = {
         id: table.recId || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         kind: 'table',
         expr: name,
         name,
-        result: formatValue(total),
+        result: formatMoney(total),
         value: total,
         paid: toNum(table.paid),
         left: total - toNum(table.paid),
@@ -759,7 +769,7 @@
       return;
     }
     if (!els.tableScreen.hidden || !els.productScreen.hidden) return;
-    if (e.target && (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT')) return;
+    if (e.target && (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
     if (state.editMode) {
       if (e.key === 'ArrowLeft') { e.preventDefault(); return moveCaret(-1); }
       if (e.key === 'ArrowRight') { e.preventDefault(); return moveCaret(1); }
@@ -1017,34 +1027,55 @@
    * ========================================================== */
 
   const TABLE_KEY = 'calc-table';
-  const FIELDS = [
-    { key: 'qcach', label: 'Q. Cách', text: true }, // quy cách dạng chữ (D x R x C), không tính toán
-    { key: 'giay', label: 'Giấy' },
-    { key: 'in', label: 'In' },
-    { key: 'gc', label: 'G.Công' },
-    { key: 'pp', label: 'Phụ phí' },
-    { key: 'ps', label: 'Phát sinh' },
-  ];
-  // Bảng chính có đúng hai hạng mục (cột): Vỏ và Ruột.
-  const ITEM_NAMES = ['Vỏ', 'Ruột'];
-  const ITEM_COUNT = ITEM_NAMES.length;
-  const fieldLabel = (key) => FIELDS.find((f) => f.key === key).label;
+  // Dòng đầu (chỉ số 0) luôn là Số lượng: không cộng vào TỔNG, dùng để tính Đơn giá.
+  const DEFAULT_LINES = ['Số lượng', 'Giấy', 'In', 'Cán', 'Bế dán', 'Ép thúc', 'Phụ phí'];
+  const DEFAULT_MARGIN = '20';
+  const defaultLines = () => DEFAULT_LINES.map((label) => ({ label, note: '', val: '', formula: '' }));
+  const fmtPlain = (n) => n.toLocaleString('vi-VN', { maximumFractionDigits: 6 });
+
+  // Đổi bảng kiểu cũ (cột Vỏ/Ruột, hàng Q.Cách/Giấy/In/G.Công/Phụ phí/Phát sinh) sang dòng mới.
+  function migrateOldRows(rows) {
+    const nums = (key) => rows.map((r) => (r && r.cells && r.cells[key]) || '');
+    const sumOf = (key) => nums(key).reduce((s, v) => s + (Number(String(v).replace(/\./g, '').replace(',', '.')) || 0), 0);
+    const spec = rows
+      .map((r) => ((r && r.cells && r.cells.qcach) ? `${r.name || ''}: ${r.cells.qcach}` : ''))
+      .filter(Boolean)
+      .join('; ');
+    const lines = [{ label: 'Số lượng', note: spec, val: '', formula: '' }];
+    [['giay', 'Giấy'], ['in', 'In'], ['gc', 'G.Công'], ['pp', 'Phụ phí'], ['ps', 'Phát sinh']].forEach(([key, label]) => {
+      const parts = rows
+        .map((r) => {
+          const cell = (r && r.cells && r.cells[key]) || '';
+          const fx = (r && r.formulas && r.formulas[key]) || '';
+          return cell ? (fx || cell) : '';
+        })
+        .filter(Boolean);
+      const total = sumOf(key);
+      lines.push({ label, note: '', val: parts.length ? fmtPlain(total) : '', formula: parts.length > 1 ? parts.join(' + ') : (parts[0] || '') });
+    });
+    return lines;
+  }
 
   // Kiểm tra và chuẩn hóa dữ liệu bảng (dùng khi tải, nhập file và khôi phục bản lưu).
   function normalizeTable(t) {
-    const src = (t && Array.isArray(t.rows)) ? t.rows : [];
-    const rows = [];
-    for (let i = 0; i < ITEM_COUNT; i++) {
-      const r = src[i] || {};
-      rows.push({
-        name: typeof r.name === 'string' && r.name ? r.name : ITEM_NAMES[i],
-        cells: (typeof r.cells === 'object' && r.cells) || {},
-        formulas: (typeof r.formulas === 'object' && r.formulas) || {},
-      });
+    const str = (v) => (typeof v === 'string' ? v : '');
+    let lines;
+    if (t && Array.isArray(t.lines) && t.lines.length) {
+      lines = t.lines.map((l, i) => ({
+        label: str(l && l.label) || (i === 0 ? 'Số lượng' : 'Dòng'),
+        note: str(l && l.note),
+        val: str(l && l.val),
+        formula: str(l && l.formula),
+      }));
+    } else if (t && Array.isArray(t.rows) && t.rows.length) {
+      lines = migrateOldRows(t.rows);
+    } else {
+      lines = defaultLines();
     }
     // recId: id sản phẩm đang mở (để Lưu cập nhật đúng sản phẩm đó); name: tên sản phẩm.
     return {
-      rows,
+      lines,
+      margin: (t && typeof t.margin === 'string' && t.margin !== '') ? t.margin : DEFAULT_MARGIN,
       recId: (t && t.recId) || null,
       name: (t && typeof t.name === 'string') ? t.name : '',
       paid: (t && typeof t.paid === 'string') ? t.paid : '',
@@ -1068,11 +1099,16 @@
   }
 
   const table = loadTable();
-  const snapshotTable = () => JSON.parse(JSON.stringify({ rows: table.rows }));
+  const snapshotTable = () => JSON.parse(JSON.stringify({ lines: table.lines, margin: table.margin }));
+  // Nạp dòng và % lợi nhuận từ một bảng đã chuẩn hóa (không đổi recId/name/paid).
+  function setTableBody(t) {
+    table.lines = t.lines;
+    table.margin = t.margin;
+  }
+  const tableHasData = () => table.lines.some((l) => l.val || l.note);
 
-  // target: { col } là trường đang nhập. selRow: chỉ số hạng mục (cột) được chọn.
+  // target: { line } là dòng đang nhập giá bằng máy tính.
   let target = null;
-  let selRow = null;
 
   // Đọc số từ ô đã định dạng kiểu vi-VN (ví dụ "1.234,5"). Ô trống tính là 0.
   function toNum(s) {
@@ -1080,87 +1116,66 @@
     const n = Number(String(s).replace(/\./g, '').replace(',', '.'));
     return Number.isFinite(n) ? n : 0;
   }
-
-  const getCell = (field, r) => table.rows[r].cells[field] || '';
-  const getFormula = (field, r) => table.rows[r].formulas[field] || '';
-
-  function setCell(field, r, v, expr) {
-    const row = table.rows[r];
-    row.cells[field] = v;
-    row.formulas[field] = expr;
-    saveTable();
+  // % lợi nhuận: người dùng gõ "12,5" hoặc "12.5".
+  function pctNum(s) {
+    const n = Number(String(s || '').trim().replace(',', '.'));
+    return Number.isFinite(n) ? n : 0;
   }
 
-  const numericFields = FIELDS.filter((f) => !f.text);
-  const fieldSum = (key) => table.rows.reduce((s, r) => s + toNum(r.cells[key]), 0);
-  const itemSum = (r) => numericFields.reduce((s, f) => s + toNum(table.rows[r].cells[f.key]), 0);
-  const grandSum = () => table.rows.reduce((s, _, r) => s + itemSum(r), 0);
+  const grandSum = () => table.lines.reduce((s, l, i) => (i === 0 ? s : s + toNum(l.val)), 0);
+  const qtyVal = () => toNum(table.lines[0].val);
+  const unitPrice = () => (qtyVal() > 0 ? grandSum() / qtyVal() : 0);
+  const quotePrice = () => unitPrice() * (1 + pctNum(table.margin) / 100);
+  // Tổng đơn = Giá báo × Số lượng = TỔNG × (1 + %). Không có số lượng vẫn tính được từ TỔNG.
+  const orderTotal = () => grandSum() * (1 + pctNum(table.margin) / 100);
+
 
   function showScreen(name) {
     const onTable = name === 'table';
     if (onTable) {
       target = null;
-      selRow = null;
       buildGrid();
     }
     els.tableScreen.hidden = !onTable;
     els.productScreen.hidden = true;
     els.calc.hidden = onTable;
+    if (onTable) fitRows();
     renderCard();
     render();
   }
 
-  function openCalc(field, row) {
-    target = { col: field };
-    selRow = row;
+  function openCalc(lineIdx) {
+    target = { line: lineIdx };
     clearResult();
+    // Dòng đã có công thức thì nạp lại để xem và sửa tiếp.
+    const f = table.lines[lineIdx] && table.lines[lineIdx].formula;
+    if (f) {
+      state.expr = f;
+      state.caret = f.length;
+    }
     showScreen('calc');
   }
 
-  function selectRow(i) {
-    selRow = i;
-    clearResult();
-    renderCard();
-    render();
-  }
-
-  // Bấm = trong chế độ bảng: ghi kết quả và công thức vào ô đang chọn.
+  // Bấm = trong chế độ bảng: ghi kết quả và công thức vào dòng đang chọn, rồi về màn hình Bảng.
   function writeResult(v, expr) {
     if (!target) return;
-    if (selRow === null) return toast('Chọn một hạng mục trước khi bấm =');
-    setCell(target.col, selRow, formatValue(v), expr);
-    toast(`Đã ghi vào ${fieldLabel(target.col)}`);
-    // Ghi xong thì quay về màn hình Bảng luôn.
+    const line = table.lines[target.line];
+    if (!line) return;
+    line.val = formatMoney(v);
+    line.formula = expr;
+    saveTable();
+    toast(`Đã ghi vào ${line.label}`);
     showScreen('table');
   }
 
+  // Thẻ phía trên máy tính: chỉ cho biết đang nhập cho dòng nào. Mở từ bảng thì dùng bàn phím gọn.
   function renderCard() {
+    els.keys.classList.toggle('compact', !!target);
     els.card.hidden = !target;
     if (!target) return;
-    els.cardTitle.textContent = fieldLabel(target.col);
-    els.cardRows.replaceChildren(...table.rows.map((r, idx) => {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'card-row' + (idx === selRow ? ' sel' : '');
-      const n = document.createElement('span');
-      n.className = 'card-name';
-      n.textContent = r.name || `Hạng mục ${idx + 1}`;
-      const v = document.createElement('span');
-      v.className = 'card-val';
-      const f = getFormula(target.col, idx);
-      if (f) {
-        const fo = document.createElement('span');
-        fo.className = 'card-formula';
-        fo.textContent = `${f} =`;
-        v.append(fo);
-      }
-      const res = document.createElement('span');
-      res.textContent = getCell(target.col, idx);
-      v.append(res);
-      b.append(n, v);
-      b.addEventListener('click', () => selectRow(idx));
-      return b;
-    }));
+    const line = table.lines[target.line];
+    els.cardTitle.textContent = line ? line.label : '';
+    els.cardRows.replaceChildren();
   }
 
   // Tạo phần tử có class (nếu có).
@@ -1179,7 +1194,21 @@
     detailMode = on;
     try { localStorage.setItem('calc-detail', on ? '1' : '0'); } catch (_) { /* bỏ qua */ }
     buildGrid();
+    fitRows();
   }
+
+  // Chia chiều cao bảng cho các dòng: thêm dòng thì mỗi dòng tự thấp lại để vừa màn hình.
+  function fitRows() {
+    const wrap = els.gridWrap;
+    if (!wrap || els.tableScreen.hidden) return;
+    const n = table.lines.length;
+    const head = 34;
+    const avail = wrap.clientHeight - head;
+    const minH = detailMode ? 44 : 30;
+    const h = Math.max(minH, Math.min(64, Math.floor(avail / Math.max(n, 1))));
+    els.grid.style.setProperty('--row-h', `${h}px`);
+  }
+  window.addEventListener('resize', fitRows);
 
   function buildGrid() {
     const g = els.grid;
@@ -1190,68 +1219,55 @@
     els.detailToggle.setAttribute('aria-label', detailMode ? 'Chi tiết: Bật' : 'Chi tiết: Tắt');
     els.detailToggle.title = detailMode ? 'Đang xem chi tiết (bấm để tắt)' : 'Xem chi tiết';
 
-    // Hàng tiêu đề: tên hạng mục (sửa được) và cột Tổng
     const head = mk('tr');
-    head.append(Object.assign(mk('th', 'sticky'), { textContent: 'Trường' }));
-    table.rows.forEach((r, i) => {
-      const th = mk('th');
-      const inp = mk('input', 'name-input');
-      inp.type = 'text';
-      inp.value = r.name;
-      inp.maxLength = 40;
-      inp.setAttribute('aria-label', `Tên hạng mục ${i + 1}`);
-      inp.addEventListener('change', () => {
-        r.name = inp.value.trim();
-        saveTable();
-      });
-      th.append(inp);
-      head.append(th);
-    });
+    head.append(
+      Object.assign(mk('th', 'sticky'), { textContent: 'Trường' }),
+      Object.assign(mk('th', 'col-note'), { textContent: 'Ghi chú' }),
+      Object.assign(mk('th', 'col-price'), { textContent: 'Amount' }),
+    );
     g.append(head);
 
-    // Mỗi trường là một hàng, ô cuối là tổng theo trường
-    for (const f of FIELDS) {
+    table.lines.forEach((line, i) => {
       const tr = mk('tr');
-      const th = mk('th', 'sticky');
-      const b = mk('button', 'col-head');
-      b.type = 'button';
-      b.textContent = f.label;
-      b.addEventListener('click', () => {
-        if (f.text) toast('Chạm vào ô của từng hạng mục để nhập');
-        else openCalc(f.key, null);
-      });
-      th.append(b);
-      tr.append(th);
-      table.rows.forEach((r, i) => {
-        const td = mk('td');
-        const c = mk('button', 'cell');
-        c.type = 'button';
-        const result = r.cells[f.key] || '';
-        const formula = r.formulas && r.formulas[f.key];
-        if (detailMode && !f.text && formula) {
-          c.classList.add('detail');
-          const val = mk('span', 'cell-val');
-          val.textContent = result;
-          const fx = mk('span', 'cell-formula');
-          fx.textContent = formula;
-          c.append(val, fx);
-        } else {
-          c.textContent = result;
-        }
-        c.addEventListener('click', () => (f.text ? openSpec(i) : openCalc(f.key, i)));
-        td.append(c);
-        tr.append(td);
-      });
-      g.append(tr);
-    }
 
-    // Hàng Tổng: tổng theo hạng mục và ô tổng cuối cùng
-    const foot = mk('tr', 'foot');
-    foot.append(Object.assign(mk('th', 'sticky'), { textContent: 'Tổng' }));
-    table.rows.forEach((_, i) => {
-      foot.append(Object.assign(mk('td', 'sum'), { textContent: formatValue(itemSum(i)) }));
+      // Tên dòng: chạm để sửa tên (hoặc xóa dòng).
+      const th = mk('th', 'sticky');
+      const lb = mk('button', 'col-head');
+      lb.type = 'button';
+      lb.textContent = line.label;
+      lb.addEventListener('click', () => openLabel(i));
+      th.append(lb);
+
+      // Quy cách: ghi chú dài, chạm để xem đủ nội dung và sửa.
+      const tdNote = mk('td', 'note-td');
+      const nb = mk('button', 'cell note');
+      nb.type = 'button';
+      const nt = mk('span', 'note-text');
+      nt.textContent = line.note;
+      nb.append(nt);
+      nb.addEventListener('click', () => openNote(i));
+      tdNote.append(nb);
+
+      // Giá: chạm để mở máy tính.
+      const tdPrice = mk('td');
+      const pb = mk('button', 'cell');
+      pb.type = 'button';
+      if (detailMode && line.formula) {
+        pb.classList.add('detail');
+        const val = mk('span', 'cell-val');
+        val.textContent = line.val;
+        const fx = mk('span', 'cell-formula');
+        fx.textContent = line.formula;
+        pb.append(val, fx);
+      } else {
+        pb.textContent = line.val;
+      }
+      pb.addEventListener('click', () => openCalc(i));
+      tdPrice.append(pb);
+
+      tr.append(th, tdNote, tdPrice);
+      g.append(tr);
     });
-    g.append(foot);
 
     renderTotals();
     els.tableTitle.textContent = table.name || 'Bảng';
@@ -1262,15 +1278,14 @@
   async function openProduct(rec) {
     closeHistory();
     if (table.recId === rec.id) return showScreen('table');
-    const hasData = table.rows.some((r) => Object.values(r.cells).some((v) => v));
-    if (!table.recId && hasData && !confirm('Bảng hiện tại chưa lưu sẽ bị thay thế. Tiếp tục?')) return;
+    if (!table.recId && tableHasData() && !confirm('Bảng hiện tại chưa lưu sẽ bị thay thế. Tiếp tục?')) return;
     const t = normalizeTable(rec.table);
     if (!t) return toast('Bản lưu bảng bị lỗi');
     if (table.recId) await autoSaveCurrent();
-    table.rows.splice(0, table.rows.length, ...t.rows);
+    setTableBody(t);
     table.recId = rec.id;
     table.name = rec.name || rec.expr || '';
-    table.paid = rec.paid ? formatValue(rec.paid) : '';
+    table.paid = rec.paid ? formatMoney(rec.paid) : '';
     saveTable();
     showScreen('table');
   }
@@ -1333,7 +1348,7 @@
     total.append(lbl, val);
     const paidNum = typeof rec.paid === 'number' ? rec.paid : 0;
     const leftNum = typeof rec.left === 'number' ? rec.left : (rec.value || 0) - paidNum;
-    body.append(total, productLine('Đã trả', formatValue(paidNum)), productLine('Còn lại', formatValue(leftNum)));
+    body.append(total, productLine('Đã trả', formatMoney(paidNum)), productLine('Còn lại', formatMoney(leftNum)));
     if (rec.note) {
       const nt = mk('div', 'item-note');
       nt.textContent = rec.note;
@@ -1373,21 +1388,41 @@
     return li;
   }
 
-  // Nhập quy cách (Q.cách) dạng chữ cho một hạng mục.
-  // Ô nhập dùng chung: 'qcach' (quy cách một hạng mục) hoặc 'rename' (sửa tên sản phẩm).
+  // Ô nhập dùng chung: 'label' (tên dòng), 'note' (quy cách nhiều dòng),
+  // 'rename' (sửa tên sản phẩm) hoặc 'newProduct' (sản phẩm mới).
   let specRow = null;
-  let specMode = 'qcach';
+  let specMode = 'note';
   let renameId = null;
 
-  function openSpec(row) {
-    specMode = 'qcach';
-    specRow = row;
-    els.specTitle.textContent = 'Q. Cách';
-    els.specLabel.textContent = 'Quy cách (D x R x C)';
-    els.specInput.placeholder = 'Ví dụ: 35 x 15 x 28';
-    els.specInput.value = table.rows[row].cells.qcach || '';
+  // multi: dùng ô nhiều dòng; canDelete: hiện nút Xóa dòng.
+  function showSpec({ multi = false, canDelete = false } = {}) {
+    els.specInput.hidden = multi;
+    els.specText.hidden = !multi;
+    els.specDelete.hidden = !canDelete;
     els.specSheet.hidden = false;
-    setTimeout(() => els.specInput.focus(), 50);
+    setTimeout(() => (multi ? els.specText : els.specInput).focus(), 50);
+  }
+
+  // Sửa tên dòng (Giấy, In, ...). Dòng Số lượng đổi tên được nhưng không xóa được.
+  function openLabel(row) {
+    specMode = 'label';
+    specRow = row;
+    els.specTitle.textContent = 'Sửa tên dòng';
+    els.specLabel.textContent = 'Tên dòng';
+    els.specInput.placeholder = 'Ví dụ: Giấy';
+    els.specInput.value = table.lines[row].label;
+    showSpec({ canDelete: row > 0 });
+  }
+
+  // Xem đủ nội dung và sửa quy cách của một dòng.
+  function openNote(row) {
+    specMode = 'note';
+    specRow = row;
+    els.specTitle.textContent = table.lines[row].label;
+    els.specLabel.textContent = 'Ghi chú';
+    els.specText.placeholder = 'Ví dụ: Couche 250gsm, khổ 79x109, cán màng mờ...';
+    els.specText.value = table.lines[row].note;
+    showSpec({ multi: true });
   }
 
   function openRename(rec) {
@@ -1395,15 +1430,15 @@
     renameId = rec.id;
     els.specTitle.textContent = 'Sửa tên sản phẩm';
     els.specLabel.textContent = 'Tên sản phẩm';
-    els.specInput.placeholder = 'Ví dụ: Túi PE 35x15x28';
+    els.specInput.placeholder = 'Ví dụ: Hộp quà tết';
     els.specInput.value = rec.name || '';
-    els.specSheet.hidden = false;
-    setTimeout(() => els.specInput.focus(), 50);
+    showSpec();
   }
 
   function closeSpec() {
     els.specSheet.hidden = true;
     els.specInput.blur();
+    els.specText.blur();
     specRow = null;
     renameId = null;
   }
@@ -1428,23 +1463,21 @@
 
   // Sản phẩm mới: hỏi tên, rồi mở bảng trống mang tên đó (lưu khi bấm Lưu trên bảng).
   function openNewProduct() {
-    const hasData = table.rows.some((r) => Object.values(r.cells).some((v) => v));
-    if (!table.recId && hasData && !confirm('Bảng hiện tại chưa lưu sẽ bị thay thế. Tiếp tục?')) return;
+    if (!table.recId && tableHasData() && !confirm('Bảng hiện tại chưa lưu sẽ bị thay thế. Tiếp tục?')) return;
     specMode = 'newProduct';
     specRow = null;
     renameId = null;
     els.specTitle.textContent = 'Sản phẩm mới';
     els.specLabel.textContent = 'Tên sản phẩm';
-    els.specInput.placeholder = 'Ví dụ: Túi PE 35x15x28';
+    els.specInput.placeholder = 'Ví dụ: Hộp quà tết';
     els.specInput.value = '';
-    els.specSheet.hidden = false;
-    setTimeout(() => els.specInput.focus(), 50);
+    showSpec();
   }
 
   async function createProduct(name) {
     if (!name) return toast('Nhập tên sản phẩm');
     if (table.recId) await autoSaveCurrent();
-    table.rows.splice(0, table.rows.length, ...normalizeTable(null).rows);
+    setTableBody(normalizeTable(null));
     table.recId = null;
     table.name = name;
     table.paid = '';
@@ -1457,12 +1490,43 @@
     if (specMode === 'newProduct') return createProduct(els.specInput.value.trim());
     if (specMode === 'rename') return saveRename();
     if (specRow === null) return closeSpec();
-    setCell('qcach', specRow, els.specInput.value.trim(), '');
+    const line = table.lines[specRow];
+    if (specMode === 'label') {
+      const v = els.specInput.value.trim();
+      if (v) line.label = v;
+    } else {
+      line.note = els.specText.value.trim();
+    }
+    saveTable();
     closeSpec();
     buildGrid();
+    fitRows();
+  }
+
+  // Xóa dòng đang sửa tên (trừ dòng Số lượng).
+  function deleteLine() {
+    if (specMode !== 'label' || specRow === null || specRow === 0) return;
+    const line = table.lines[specRow];
+    if ((line.val || line.note) && !confirm(`Xóa dòng "${line.label}"?`)) return;
+    table.lines.splice(specRow, 1);
+    saveTable();
+    closeSpec();
+    buildGrid();
+    fitRows();
+  }
+
+  // Thêm dòng mới ở cuối và mở luôn ô đặt tên.
+  function addLine() {
+    table.lines.push({ label: 'Dòng mới', note: '', val: '', formula: '' });
+    saveTable();
+    buildGrid();
+    fitRows();
+    openLabel(table.lines.length - 1);
   }
 
   els.specOk.addEventListener('click', saveSpec);
+  els.specDelete.addEventListener('click', deleteLine);
+  els.addLine.addEventListener('click', addLine);
   els.specCancel.addEventListener('click', closeSpec);
   els.specSheet.addEventListener('click', (e) => {
     if (e.target === els.specSheet) closeSpec();
@@ -1474,15 +1538,13 @@
   els.openTable.addEventListener('click', () => showScreen('table'));
   els.toCalc.addEventListener('click', () => {
     target = null;
-    selRow = null;
     showScreen('calc');
   });
   // Tạo bảng mới trống. Nếu bảng hiện tại có số liệu thì hỏi trước, tránh ghi đè.
   async function newTable() {
-    const hasData = table.rows.some((r) => Object.values(r.cells).some((v) => v));
-    if (!table.recId && hasData && !confirm('Bảng hiện tại chưa lưu sẽ bị xóa. Tạo bảng mới?')) return;
+    if (!table.recId && tableHasData() && !confirm('Bảng hiện tại chưa lưu sẽ bị xóa. Tạo bảng mới?')) return;
     if (table.recId) await autoSaveCurrent();
-    table.rows.splice(0, table.rows.length, ...normalizeTable(null).rows);
+    setTableBody(normalizeTable(null));
     table.recId = null;
     table.name = '';
     table.paid = '';
@@ -1491,27 +1553,32 @@
     toast('Đã tạo bảng mới');
   }
 
-  // Tổng cuối cùng, phần đã trả và còn lại.
+  // TỔNG (tổng cột Amount), Đơn giá (= TỔNG / Số lượng), Giá báo (= Đơn giá × (1 + %)),
+  // Tổng đơn (= Giá báo × Số lượng), Đã trả và Còn lại (= Tổng đơn − Đã trả).
   function renderTotals() {
-    const grand = grandSum();
+    const order = orderTotal();
     const paid = toNum(table.paid);
-    els.totalVal.textContent = formatValue(grand);
+    els.totalVal.textContent = formatMoney(grandSum());
+    els.unitVal.textContent = formatMoney(unitPrice());
+    els.quoteVal.textContent = formatMoney(quotePrice());
+    els.orderVal.textContent = formatMoney(order);
+    if (document.activeElement !== els.marginInput) els.marginInput.value = table.margin;
     if (document.activeElement !== els.paidInput) els.paidInput.value = table.paid;
-    els.leftVal.textContent = formatValue(grand - paid);
+    els.leftVal.textContent = formatMoney(order - paid);
   }
 
   // Ghi bảng đang mở vào đúng sản phẩm của nó, không hỏi lại.
   async function autoSaveCurrent() {
     if (!table.recId) return;
     const old = productRecords.find((r) => r.id === table.recId) || {};
-    const grand = grandSum();
+    const grand = orderTotal();
     const paid = toNum(table.paid);
     await dbAdd({
       id: table.recId,
       kind: 'table',
       expr: table.name || 'Chưa đặt tên',
       name: table.name || '',
-      result: formatValue(grand),
+      result: formatMoney(grand),
       value: grand,
       paid,
       left: grand - paid,
@@ -1522,6 +1589,11 @@
   }
 
   els.detailToggle.addEventListener('click', () => setDetailMode(!detailMode));
+  els.marginInput.addEventListener('input', () => {
+    table.margin = els.marginInput.value;
+    saveTable();
+    renderTotals();
+  });
   els.tableNew.addEventListener('click', newTable);
   els.paidInput.addEventListener('input', () => {
     table.paid = els.paidInput.value;

@@ -24,14 +24,32 @@
     <div class="table-title-row">
       <span class="title-spacer" aria-hidden="true"></span>
       <h2 class="table-title" id="tableTitle">Bảng</h2>
-      <button type="button" id="detailToggle" class="icon-btn" aria-pressed="false" aria-label="Chi tiết: Tắt" title="Xem chi tiết">
-        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M3 5h18v2H3zM3 11h12v2H3zM3 17h18v2H3z"/></svg>
-      </button>
+      <div class="title-actions">
+        <button type="button" id="detailToggle" class="icon-btn" aria-pressed="false" aria-label="Chi tiết: Tắt" title="Xem chi tiết">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M3 5h18v2H3zM3 11h12v2H3zM3 17h18v2H3z"/></svg>
+        </button>
+        <button type="button" id="addLine" class="icon-btn" aria-label="Thêm dòng" title="Thêm dòng">+</button>
+      </div>
     </div>
-    <div class="grid-wrap"><table class="grid" id="grid"></table></div>
+    <div class="grid-wrap" id="gridWrap">
+      <table class="grid" id="grid"></table>
+    </div>
+    <div class="grand-line"><span>TỔNG</span><span id="totalVal"></span></div>
     <div class="total-box">
-      <span class="total-label">TỔNG</span>
-      <span id="totalVal"></span>
+      <div class="total-row">
+        <span>Đơn giá</span>
+        <span id="unitVal" class="sub-val"></span>
+      </div>
+      <div class="total-row">
+        <span class="quote-label">Giá báo
+          <span class="pct-wrap"><input type="text" inputmode="decimal" id="marginInput" class="pct-input" aria-label="Phần trăm lợi nhuận" placeholder="0"><span aria-hidden="true">%</span></span>
+        </span>
+        <span id="quoteVal" class="quote-val"></span>
+      </div>
+      <div class="total-row">
+        <span>Tổng đơn</span>
+        <span id="orderVal" class="sub-val"></span>
+      </div>
       <div class="total-row">
         <span>Đã trả</span>
         <input type="text" inputmode="decimal" id="paidInput" class="paid-input" placeholder="0" aria-label="Số tiền đã trả">
@@ -73,7 +91,7 @@
         <button type="button" id="caretRight" class="tool-chip arrow" hidden aria-label="Con trỏ sang phải">▶</button>
         <label class="tool-select">Thập phân
           <select id="decimals" aria-label="Số chữ số sau dấu thập phân">
-            <option value="auto">Tự động</option>
+            <option value="auto">Tối đa 2</option>
             <option value="0">0</option>
             <option value="1">1</option>
             <option value="2">2</option>
@@ -135,12 +153,14 @@
       <header>
         <h2 id="specTitle">Q. Cách</h2>
         <div class="sheet-actions">
+          <button type="button" id="specDelete" class="text-btn danger" hidden>Xóa dòng</button>
           <button type="button" id="specCancel" class="text-btn">Hủy</button>
           <button type="button" id="specOk" class="text-btn strong">Lưu</button>
         </div>
       </header>
       <label class="note-label" for="specInput" id="specLabel">Quy cách (D x R x C)</label>
-      <input type="text" id="specInput" class="note-input" maxlength="40" autocomplete="off" placeholder="Ví dụ: 35 x 15 x 28">
+      <input type="text" id="specInput" class="note-input" maxlength="60" autocomplete="off">
+      <textarea id="specText" class="note-input note-area" rows="6" maxlength="600" hidden></textarea>
     </div>
   </div>
 

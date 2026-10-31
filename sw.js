@@ -1,7 +1,7 @@
 // Service worker: cache toàn bộ giao diện để chạy offline.
 // Chiến lược: luôn thử tải bản mới từ mạng trước; chỉ dùng bản đã lưu khi offline.
 // Khi đổi code, tăng CACHE_VERSION để xóa cache cũ.
-const CACHE_VERSION = 'v25';
+const CACHE_VERSION = 'v29';
 const CACHE_NAME = `calc-${CACHE_VERSION}`;
 
 const APP_SHELL = [
