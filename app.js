@@ -233,6 +233,8 @@
     addLine: document.getElementById('addLine'),
     unitVal: document.getElementById('unitVal'),
     orderVal: document.getElementById('orderVal'),
+    deliveredInput: document.getElementById('deliveredInput'),
+    deliverLeftVal: document.getElementById('deliverLeftVal'),
     quoteVal: document.getElementById('quoteVal'),
     marginInput: document.getElementById('marginInput'),
     specText: document.getElementById('specText'),
@@ -485,6 +487,7 @@
         value: total,
         paid: toNum(table.paid),
         left: total - toNum(table.paid),
+        deliverLeft: deliverLeft(),
         table: snapshotTable(),
         createdAt: Date.now(),
         ...(note ? { note } : {}),
@@ -1076,6 +1079,7 @@
     return {
       lines,
       margin: (t && typeof t.margin === 'string' && t.margin !== '') ? t.margin : DEFAULT_MARGIN,
+      delivered: (t && typeof t.delivered === 'string') ? t.delivered : '',
       recId: (t && t.recId) || null,
       name: (t && typeof t.name === 'string') ? t.name : '',
       paid: (t && typeof t.paid === 'string') ? t.paid : '',
@@ -1099,11 +1103,12 @@
   }
 
   const table = loadTable();
-  const snapshotTable = () => JSON.parse(JSON.stringify({ lines: table.lines, margin: table.margin }));
+  const snapshotTable = () => JSON.parse(JSON.stringify({ lines: table.lines, margin: table.margin, delivered: table.delivered }));
   // Nạp dòng và % lợi nhuận từ một bảng đã chuẩn hóa (không đổi recId/name/paid).
   function setTableBody(t) {
     table.lines = t.lines;
     table.margin = t.margin;
+    table.delivered = t.delivered;
   }
   const tableHasData = () => table.lines.some((l) => l.val || l.note);
 
@@ -1127,6 +1132,8 @@
   const unitPrice = () => (qtyVal() > 0 ? grandSum() / qtyVal() : 0);
   const quotePrice = () => unitPrice() * (1 + pctNum(table.margin) / 100);
   // Tổng đơn = Giá báo × Số lượng = TỔNG × (1 + %). Không có số lượng vẫn tính được từ TỔNG.
+  // Số lượng giao còn lại = Số lượng − Số lượng đã giao.
+  const deliverLeft = () => qtyVal() - toNum(table.delivered);
   const orderTotal = () => grandSum() * (1 + pctNum(table.margin) / 100);
 
 
@@ -1349,6 +1356,7 @@
     const paidNum = typeof rec.paid === 'number' ? rec.paid : 0;
     const leftNum = typeof rec.left === 'number' ? rec.left : (rec.value || 0) - paidNum;
     body.append(total, productLine('Đã trả', formatMoney(paidNum)), productLine('Còn lại', formatMoney(leftNum)));
+    if (typeof rec.deliverLeft === 'number') body.append(productLine('Giao còn lại', formatMoney(rec.deliverLeft)));
     if (rec.note) {
       const nt = mk('div', 'item-note');
       nt.textContent = rec.note;
@@ -1565,6 +1573,8 @@
     if (document.activeElement !== els.marginInput) els.marginInput.value = table.margin;
     if (document.activeElement !== els.paidInput) els.paidInput.value = table.paid;
     els.leftVal.textContent = formatMoney(order - paid);
+    if (document.activeElement !== els.deliveredInput) els.deliveredInput.value = table.delivered;
+    els.deliverLeftVal.textContent = formatMoney(deliverLeft());
   }
 
   // Ghi bảng đang mở vào đúng sản phẩm của nó, không hỏi lại.
@@ -1582,6 +1592,7 @@
       value: grand,
       paid,
       left: grand - paid,
+      deliverLeft: deliverLeft(),
       table: snapshotTable(),
       createdAt: old.createdAt || Date.now(),
       ...(old.note ? { note: old.note } : {}),
@@ -1589,6 +1600,11 @@
   }
 
   els.detailToggle.addEventListener('click', () => setDetailMode(!detailMode));
+  els.deliveredInput.addEventListener('input', () => {
+    table.delivered = els.deliveredInput.value;
+    saveTable();
+    renderTotals();
+  });
   els.marginInput.addEventListener('input', () => {
     table.margin = els.marginInput.value;
     saveTable();

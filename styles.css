@@ -635,3 +635,5 @@ body {
 .keys.compact [data-action="comma"] { grid-area: 5 / 2; }
 .keys.compact [data-action="op+"] { grid-area: 5 / 3; }
 .keys.compact [data-action="equals"] { grid-area: 5 / 4; }
+.total-row.sep { border-top: 1px solid #3a3a3c; margin-top: 8px; padding-top: 8px; }
+#deliverLeftVal { color: #64d2ff; }
