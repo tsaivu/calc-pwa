@@ -608,32 +608,46 @@ body {
 
 /* Bàn phím gọn khi nhập giá cho một dòng của bảng: bỏ Lưu, Lịch sử, +/-, %; phím số và phép tính to hơn */
 .card-rows:empty { display: none; }
-.keys.compact { grid-template-columns: repeat(4, 1fr); }
+/* Bàn phím gọn khi nhập giá: bố cục và kích thước như máy tính iOS
+   (4 cột phím tròn, cột phải là phép tính, hàng dưới: ⌫ 0 , =). */
+.keys.compact {
+  grid-template-columns: repeat(4, 1fr);
+  gap: min(3.6vw, 17px);
+  padding: 0 min(1vw, 6px) 16px;
+}
 .keys.compact .key[data-action="sign"],
 .keys.compact .key[data-action="percent"],
 .keys.compact .key[data-action="save"],
 .keys.compact .key[data-action="history"] { display: none; }
-.keys.compact .key { aspect-ratio: 1 / 0.82; border-radius: 999px; font-size: 32px; }
-.keys.compact .key.zero { grid-column: 1; aspect-ratio: 1 / 0.82; }
-.keys.compact [data-action="clear"] { grid-area: 1 / 1; }
-.keys.compact [data-action="back"] { grid-area: 1 / 2; }
-.keys.compact [data-action="lparen"] { grid-area: 1 / 3; }
-.keys.compact [data-action="rparen"] { grid-area: 1 / 4; }
+.keys.compact .key {
+  aspect-ratio: 1 / 1;
+  border-radius: 50%;
+  font-size: min(9.6vw, 42px);
+  font-weight: 400;
+}
+.keys.compact .key.fn { font-size: min(8vw, 34px); font-weight: 500; }
+.keys.compact .key.op { font-size: min(10.4vw, 46px); }
+.keys.compact .key svg { width: min(7.6vw, 32px); height: min(7.6vw, 32px); }
+.keys.compact .key.zero { grid-column: auto; padding-left: 0; justify-content: center; }
+.keys.compact [data-action="clear"]  { grid-area: 1 / 1; }
+.keys.compact [data-action="lparen"] { grid-area: 1 / 2; }
+.keys.compact [data-action="rparen"] { grid-area: 1 / 3; }
+.keys.compact [data-action="op÷"]    { grid-area: 1 / 4; }
 .keys.compact [data-action="d7"] { grid-area: 2 / 1; }
 .keys.compact [data-action="d8"] { grid-area: 2 / 2; }
 .keys.compact [data-action="d9"] { grid-area: 2 / 3; }
-.keys.compact [data-action="op÷"] { grid-area: 2 / 4; }
+.keys.compact [data-action="op×"] { grid-area: 2 / 4; }
 .keys.compact [data-action="d4"] { grid-area: 3 / 1; }
 .keys.compact [data-action="d5"] { grid-area: 3 / 2; }
 .keys.compact [data-action="d6"] { grid-area: 3 / 3; }
-.keys.compact [data-action="op×"] { grid-area: 3 / 4; }
+.keys.compact [data-action="op−"] { grid-area: 3 / 4; }
 .keys.compact [data-action="d1"] { grid-area: 4 / 1; }
 .keys.compact [data-action="d2"] { grid-area: 4 / 2; }
 .keys.compact [data-action="d3"] { grid-area: 4 / 3; }
-.keys.compact [data-action="op−"] { grid-area: 4 / 4; }
-.keys.compact [data-action="d0"] { grid-area: 5 / 1; }
-.keys.compact [data-action="comma"] { grid-area: 5 / 2; }
-.keys.compact [data-action="op+"] { grid-area: 5 / 3; }
+.keys.compact [data-action="op+"] { grid-area: 4 / 4; }
+.keys.compact [data-action="back"]   { grid-area: 5 / 1; }
+.keys.compact [data-action="d0"]     { grid-area: 5 / 2; }
+.keys.compact [data-action="comma"]  { grid-area: 5 / 3; }
 .keys.compact [data-action="equals"] { grid-area: 5 / 4; }
 .total-row.sep { border-top: 1px solid #3a3a3c; margin-top: 8px; padding-top: 8px; }
 #deliverLeftVal { color: #64d2ff; }
