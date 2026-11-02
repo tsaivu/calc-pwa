@@ -588,6 +588,7 @@
     els.main.classList.toggle('long', !state.error && main.length > 9);
     els.main.classList.toggle('xlong', !state.error && main.length > 14);
     els.sub.replaceChildren(colorExpr(expr, caretAt));
+    renderClrback();
     followCaret();
   }
 
@@ -637,6 +638,8 @@
    * ========================================================== */
 
   const ICON = {
+    del: '<svg viewBox="0 0 28 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9.2 4h13.3A2.5 2.5 0 0 1 25 6.5v11a2.5 2.5 0 0 1-2.5 2.5H9.2a2 2 0 0 1-1.5-.7L2.6 13.3a2 2 0 0 1 0-2.6l5.1-6a2 2 0 0 1 1.5-.7z"/><path d="M12.5 8.5l7 7M19.5 8.5l-7 7"/></svg>',
+    calc: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="5" y="2.5" width="14" height="19" rx="3"/><rect x="8" y="5.5" width="8" height="3.5" rx="0.8"/><circle cx="9" cy="12.5" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="12.5" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="12.5" r="1" fill="currentColor" stroke="none"/><circle cx="9" cy="16" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="16" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="16" r="1" fill="currentColor" stroke="none"/></svg>',
     back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12H6"/><path d="M11 6l-6 6 6 6"/></svg>',
     trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13h10l1-13"/></svg>',
     list: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1" fill="currentColor"/><circle cx="4.5" cy="12" r="1" fill="currentColor"/><circle cx="4.5" cy="18" r="1" fill="currentColor"/></svg>',
@@ -672,6 +675,9 @@
       [',', 'comma', 'num'],
       ['+', 'op+', 'op'],
       ['=', 'equals', 'op'],
+      // Chỉ hiện ở bàn phím gọn (kiểu iOS): ⌫ tự đổi thành AC, nút biểu tượng máy tính.
+      ['AC', 'clrback', 'fn', { ios: true }],
+      [ICON.calc, 'mode', 'num', { icon: true, ios: true }],
     ],
   ];
 
@@ -682,7 +688,7 @@
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = `key ${kind}` +
-          (opt.zero ? ' zero' : '') + (opt.equals ? ' equals' : '');
+          (opt.zero ? ' zero' : '') + (opt.equals ? ' equals' : '') + (opt.ios ? ' ios-only' : '');
         btn.dataset.action = action;
         if (opt.icon) {
           btn.innerHTML = label;
@@ -694,10 +700,26 @@
       }
     }
     els.keys.appendChild(frag);
+    els.clrback = els.keys.querySelector('[data-action="clrback"]');
+  }
+
+  // Như iOS: đang có số nhập thì phím trên cùng bên trái là ⌫, còn trống hoặc vừa ra kết quả thì là AC.
+  function showAC() { return state.expr === '' || state.justEvaluated || state.error; }
+  function renderClrback() {
+    const btn = els.clrback;
+    if (!btn) return;
+    const ac = showAC();
+    if (btn.dataset.mode === (ac ? 'ac' : 'del')) return;
+    btn.dataset.mode = ac ? 'ac' : 'del';
+    if (ac) btn.textContent = 'AC';
+    else btn.innerHTML = ICON.del;
+    btn.setAttribute('aria-label', ac ? 'Xóa hết' : 'Xóa lùi');
   }
 
   const ACTIONS = {
     clear: () => clearAllState(),
+    clrback: () => (showAC() ? clearAllState() : backspace()),
+    mode: () => showScreen('table'),
     trash: () => clearAllState(),
     lparen: () => inputParen('('),
     rparen: () => inputParen(')'),
