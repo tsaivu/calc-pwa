@@ -404,6 +404,7 @@ body {
 .list-tools { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .list-tools .search-input { flex: 1 1 auto; min-width: 0; }
 .list-tools .tool-chip { flex: none; padding: 8px 14px; font-size: 18px; }
+.list-tools #productExport { font-size: 15px; }
 .product-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 .item-edit {
   appearance: none;
